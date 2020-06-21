@@ -23,7 +23,7 @@ require_once("guiconfig.inc");
 
 /* Define hash of jumpto url maps */
 $helppages = array(
-	'index.php' => 'https://doc.pfsense.org/index.php/Dashboard',
+	'index.php' => 'https://doc.cksdnow.com/index.php/Dashboard',
 
 	'crash_reporter.php' => 'https://doc.pfsense.org/index.php/Unexpected_Reboot_Troubleshooting',
 	'diag_arp.php' => 'https://doc.pfsense.org/index.php/ARP_Table',

@@ -244,7 +244,7 @@ if (file_exists("/usr/local/bin/git")) {
 		isset($gitcfg['dryrun'])
 		))->setHelp('Dry-run only.%1$sNo files copied.', '<br />');
 
-	$group->setHelp('See "playback gitsync --help" in console "PHP Shell + pfSense tools" for additional information.');
+	$group->setHelp('See "playback gitsync --help" in console "PHP Shell + ckSense tools" for additional information.');
 	$section->add($group);
 
 	$form->add($section);

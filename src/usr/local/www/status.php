@@ -213,7 +213,7 @@ function get_firewall_info() {
 	if (file_exists('/var/db/uniqueid')) {
 		$ngid = file_get_contents('/var/db/uniqueid');
 		if (!empty($ngid)) {
-			$firewall_info .= "<br/>Netgate Device ID: " . htmlspecialchars($ngid);
+			$firewall_info .= "<br/>Device ID: " . htmlspecialchars($ngid);
 		}
 	}
 

@@ -2091,10 +2091,10 @@ function session_auth() {
 function print_credit() {
 	global $g;
 
-	return  '<a target="_blank" href="https://pfsense.org">' . $g["product_name"] . '</a>' .
-			gettext(' is derived from open source firewall.') .
-			'<a target="_blank" href="https://github.com/cklee288">ckSense. </a>' .
-			'<a target="_blank" href="https://github.com/cklee288/cksense/blob/master/LICENSE">' .
+	return  '<a target="_blank" href="https://cksdnow.com">' . $g["product_name"] . '</a>' .
+			gettext(' is derived from opensource firewall. Please check ') .
+			'<a target="_blank" href="https://cksdnow.com">CKSD </a>' . ' for detail. ' .
+			'<a target="_blank" href="https://cksdnow.com/license">' .
 			gettext(' View license.') . '</a>';
 }
 function get_user_remote_address() {
