@@ -632,7 +632,7 @@ $section->addInput(new Form_Checkbox(
 	'Disable MAC filtering',
 	$pconfig['nomacfilter']
 ))->setHelp('If enabled no attempts will be made to ensure that the MAC address of clients stays the same while they are logged in. ' .
-			'This is required when the MAC address of the client cannot be determined (usually because there are routers between pfSense and the clients). ' .
+			'This is required when the MAC address of the client cannot be determined (usually because there are routers between ckSense and the clients). ' .
 			'If this is enabled, RADIUS MAC authentication cannot be used.');
 
 $section->addInput(new Form_Checkbox(
@@ -951,17 +951,17 @@ $section->addInput(new Form_Checkbox(
 $section->addInput(new Form_Checkbox(
 	'radiustraffic_quota',
 	'Traffic quota',
-	'Use RADIUS pfSense-Max-Total-Octets attribute',
+	'Use RADIUS ckSense-Max-Total-Octets attribute',
 	$pconfig['radiustraffic_quota']
-))->setHelp('When enabled, clients will be disconnected after exceeding the amount of traffic, inclusive of both downloads and uploads, retrieved from the RADIUS pfSense-Max-Total-Octets attribute.');
+))->setHelp('When enabled, clients will be disconnected after exceeding the amount of traffic, inclusive of both downloads and uploads, retrieved from the RADIUS ckSense-Max-Total-Octets attribute.');
 
 $section->addInput(new Form_Checkbox(
 	'radiusperuserbw',
 	'Per-user bandwidth restrictions',
-	'Use RADIUS pfSense-Bandwidth-Max-Up and pfSense-Bandwidth-Max-Down attributes',
+	'Use RADIUS ckSense-Bandwidth-Max-Up and ckSense-Bandwidth-Max-Down attributes',
 	$pconfig['radiusperuserbw']
-))->setHelp('When enabled, the bandwidth assigned to a client will be limited to the values retrieved from the RADIUS pfSense-Bandwidth-Max-Up and ' .
-			'pfSense-Bandwidth-Max-Down attributes or from the comparable WISPr attributes.');
+))->setHelp('When enabled, the bandwidth assigned to a client will be limited to the values retrieved from the RADIUS ckSense-Bandwidth-Max-Up and ' .
+			'ckSense-Bandwidth-Max-Down attributes or from the comparable WISPr attributes.');
 
 $section->addInput(new Form_Select(
 	'radmac_format',
@@ -1089,7 +1089,7 @@ $section->addInput(new Form_Input(
 	$pconfig['httpsname']
 ))->setHelp('This name will be used in the form action for the HTTPS POST and should match the Common Name (CN) in the certificate ' .
 			'(otherwise, the client browser will most likely display a security warning). ' .
-			'Make sure captive portal clients can resolve this name in DNS and verify on the client that the IP resolves to the correct interface IP on pfSense.');
+			'Make sure captive portal clients can resolve this name in DNS and verify on the client that the IP resolves to the correct interface IP on ckSense.');
 
 $section->addInput(new Form_Select(
 	'certref',

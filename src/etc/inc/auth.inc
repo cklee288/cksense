@@ -2104,10 +2104,10 @@ function session_auth() {
 function print_credit() {
 	global $g;
 
-	return  '<a target="_blank" href="https://pfsense.org">' . $g["product_name"] . '</a>' .
-			gettext(' is developed and maintained by ') .
-			'<a target="_blank" href="https://netgate.com">Netgate. </a>' . ' &copy; ESF ' . $g["product_copyright_years"] .
-			'<a target="_blank" href="https://pfsense.org/license">' .
+	return  '<a target="_blank" href="https://cksdnow.com">' . $g["product_name"] . '</a>' .
+			gettext(' is derived from open source firewall. Please refer to public git repository ') .
+			'<a target="_blank" href="https://github.com/cklee288/">code. </a>' .
+			'<a target="_blank" href="https://cksdnow.com/license">' .
 			gettext(' View license.') . '</a>';
 }
 function get_user_remote_address() {

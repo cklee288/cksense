@@ -25,9 +25,9 @@
 	<totalsteps>9</totalsteps>
 	<step>
 		<id>1</id>
-		<title>pfSense Traffic Shaper</title>
+		<title>ckSense Traffic Shaper</title>
 		<disableheader>true</disableheader>
-		<description>This wizard will provide guidance through setting up the pfSense traffic shaper. &lt;br/&gt;&lt;br/&gt; The wizard may be stopped at any time by clicking the logo image at the top of the screen.
+		<description>This wizard will provide guidance through setting up the ckSense traffic shaper. &lt;br/&gt;&lt;br/&gt; The wizard may be stopped at any time by clicking the logo image at the top of the screen.
 			&lt;br/&gt;&lt;br/&gt; Please be aware that Custom Bandwidths should not exceed 30% of the interface/link bandwidth. Keep this in mind during the wizard.
 		</description>
 		<fields>

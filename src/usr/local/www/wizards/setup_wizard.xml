@@ -24,14 +24,14 @@
 <totalsteps>10</totalsteps>
 <step>
 	<id>1</id>
-	<title>pfSense Setup</title>
+	<title>ckSense Setup</title>
 	<disableheader>true</disableheader>
 	<description>
 		<![CDATA[
-		<p><h4>Welcome to pfSense® software!</h4></p>
-		<p>This wizard will provide guidance through the initial configuration of pfSense.</p>
+		<p><h4>Welcome to ckSense software!</h4></p>
+		<p>This wizard will provide guidance through the initial configuration of ckSense.</p>
 		<p>The wizard may be stopped at any time by clicking the logo image at the top of the screen.</p>
-		<p><strong>pfSense® software is developed and maintained by Netgate®<strong></p>
+		<p><strong>ckSense software is developed and maintained by Netgate®<strong></p>
 		<br />
 		<p><a href="https://www.netgate.com/pfw1" class="btn btn-info" target="_blank">Learn more</a></p>
 		]]>
@@ -76,7 +76,7 @@
 <step>
 	<id>3</id>
 	<title>General Information</title>
-	<description>On this screen the general pfSense parameters will be set.</description>
+	<description>On this screen the general ckSense parameters will be set.</description>
 	<fields>
 		<field>
 			<name>Hostname</name>
@@ -578,7 +578,7 @@
 			} else {
 				$_POST['ipaddress'] = $_POST['selectedtype'];
 				$config['interfaces']['wan']['ipaddr'] = $_POST['selectedtype'];
-				write_config(gettext("WAN interface configuration saved via pfSense setup wizard."));
+				write_config(gettext("WAN interface configuration saved via ckSense setup wizard."));
 			}
 			if (!$config['interfaces']['lan']) {
 				header("Location: /wizard.php?xml=setup_wizard.xml&stepid=6&next=Next");
@@ -722,7 +722,7 @@
 			$admin_user =& getUserEntryByUID(0);
 			local_user_set_password($admin_user, $_POST['adminpassword']);
 			local_user_set($admin_user);
-			write_config(gettext("Admin WebGUI password saved via pfSense setup wizard."));
+			write_config(gettext("Admin WebGUI password saved via ckSense setup wizard."));
 		} else {
 			print_info_box("Passwords do not match! Please press back in the browser window and correct.");
 			die;
@@ -735,7 +735,7 @@
 	<id>8</id>
 	<title>Reload configuration</title>
 	<disableheader>true</disableheader>
-	<description>Click 'Reload' to reload pfSense with new changes.</description>
+	<description>Click 'Reload' to reload ckSense with new changes.</description>
 	<fields>
 		<field>
 			<name>Reload</name>
@@ -786,7 +786,7 @@
 		unset($config['wizardtemp']);
 		/* See https://redmine.pfsense.org/issues/8524 */
 		$config['system']['webgui']['althostnames'] = $althosts_before;
-		write_config(gettext("Configuration saved on completion of the pfSense setup wizard."));
+		write_config(gettext("Configuration saved on completion of the ckSense setup wizard."));
 		reload_all();
 		mwexec_bg("/etc/rc.update_bogons.sh now");
 		touch("{$g['cf_conf_path']}/copynotice_display");
@@ -807,7 +807,7 @@
 	<description>
 	<![CDATA[
 	<div style="padding-right:25px;">
-		<p><h4>Congratulations! pfSense is now configured.</h4></p>
+		<p><h4>Congratulations! ckSense is now configured.</h4></p>
 		<p>
 		We recommend that you check to see if there are any software updates available. Keeping your software up to date is
 		one of the most important things you can do to maintain the security of your network.</p>
@@ -817,15 +817,15 @@
 		<p><a target='_blank' href='https://www.netgate.com/pfw2'><strong><span style="font-size:16px">Click here</span></strong></a> to learn about Netgate 24/7/365 support services.</p>
 		<br />
 		<p><h4>User survey</h4></p>
-		<p>Please help all the people involved in improving and expanding pfSense software by taking a moment to answer this short survey (all answers are anonymous)<br />
+		<p>Please help all the people involved in improving and expanding ckSense software by taking a moment to answer this short survey (all answers are anonymous)<br />
 		<a href="https://redirects.netgate.com/survey_1" target="_blank"><strong><span style="font-size:16px">Anonymous User Survey</span></a></p>
 		<br />
 		<p><h4>Useful resources.</h4></p>
 		<p>
 			<ul>
-				<li>Learn more about Netgate's product line, services, and pfSense software from our <a target='_blank' href='https://www.netgate.com/pfw3'>website</a></li>
+				<li>Learn more about Netgate's product line, services, and ckSense software from our <a target='_blank' href='https://www.netgate.com/pfw3'>website</a></li>
 				<li>To learn about Netgate appliances and other offers, <a target='_blank' href='https://www.netgate.com/pfw4'>visit our store</a></li>
-				<li>Become part of the pfSense community. Visit our <a target='_blank' href='https://www.netgate.com/pfw5'>forum</a></li>
+				<li>Become part of the ckSense community. Visit our <a target='_blank' href='https://www.netgate.com/pfw5'>forum</a></li>
 				<li>Subscribe to our <a target='_blank' href='https://www.netgate.com/pfw6'>newsletter</a> for ongoing product information, software announcements and special offers.</li>
 			</ul>
 		</p>

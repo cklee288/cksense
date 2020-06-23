@@ -425,12 +425,12 @@ if (!$g['disablehelpmenu']) {
 		$help_menu[] = array(gettext("Bug Database"), "https://redirects.netgate.com/issues");
 	}
 
-	$help_menu[] = array(gettext("User Forum"), "https://redirects.netgate.com/forum");
-	$help_menu[] = array(gettext("Documentation"), "https://redirects.netgate.com/docs");
-	$help_menu[] = array(gettext("Paid Support"), "https://redirects.netgate.com/support");
-	$help_menu[] = array(gettext("pfSense Book"), "https://redirects.netgate.com/book");
-	$help_menu[] = array(gettext("FreeBSD Handbook"), "https://redirects.netgate.com/fbsdhandbook");
-	$help_menu[] = array(gettext("User survey"), "https://redirects.netgate.com/survey_1");
+	$help_menu[] = array(gettext("User Forum"), "https://redirects.cksdnow.com/forum");
+	$help_menu[] = array(gettext("Documentation"), "https://redirects.cksdnow.com/docs");
+	$help_menu[] = array(gettext("Paid Support"), "https://redirects.cksdnow.com/support");
+	$help_menu[] = array(gettext("ckSense Book"), "https://redirects.cksdnow.com/book");
+	$help_menu[] = array(gettext("FreeBSD Handbook"), "https://redirects.cksdnow.com/fbsdhandbook");
+	$help_menu[] = array(gettext("User survey"), "https://redirects.cksdnow.com/survey_1");
 	$help_menu = msort(array_merge($help_menu, return_ext_menu("Help")), 0);
 }
 

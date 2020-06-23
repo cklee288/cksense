@@ -38,7 +38,7 @@ if (isset($platform['descr'])) {
 if (!empty($serial)) {
 	printf("%s: %s - ", gettext("Serial"), $serial);
 }
-printf("%s: %s\n\n", gettext("Netgate Device ID"), system_get_uniqueid());
+printf("%s: %s\n\n", gettext("Device ID"), system_get_uniqueid());
 
 print "*** Welcome to {$product} {$g['product_version_string']} ({$machine}) on {$hostname} ***\n";
 

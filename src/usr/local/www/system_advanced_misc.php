@@ -664,10 +664,10 @@ $section = new Form_Section('Installation Feedback');
 
 $section->addInput(new Form_Checkbox(
 	'do_not_send_uniqueid',
-	'Netgate Device ID',
-	'Do NOT send Netgate Device ID with user agent',
+	'Device ID',
+	'Do NOT send Device ID with user agent',
 	$pconfig['do_not_send_uniqueid']
-))->setHelp('Enable this option to not send Netgate Device ID to pfSense as part of User-Agent header.');
+))->setHelp('Enable this option to not send Device ID to ckSense as part of User-Agent header.');
 
 $form->add($section);
 

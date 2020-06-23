@@ -305,7 +305,7 @@ function upload_config($manual = false) {
 			}
 
 			if (strpos($data, "500") != false) {
-				$notice_text = "An error occurred while uploading your pfSense configuration to " . $upload_url . " (" . htmlspecialchars($data) . ")";
+				$notice_text = "An error occurred while uploading your ckSense configuration to cloud" . " (" . htmlspecialchars($data) . ")";
 				log_error($notice_text . " - " . $data);
 				file_notice("AutoConfigBackup", $notice_text, "Backup Failure", "/pkg_edit.php?xml=autoconfigbackup.xml&id=0");
 				update_filter_reload_status($notice_text);

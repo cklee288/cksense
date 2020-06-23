@@ -201,7 +201,7 @@ function get_firewall_info() {
 	if (file_exists('/var/db/uniqueid')) {
 		$ngid = file_get_contents('/var/db/uniqueid');
 		if (!empty($ngid)) {
-			$firewall_info .= "<br/>Netgate Device ID: " . htmlspecialchars($ngid);
+			$firewall_info .= "<br/>Device ID: " . htmlspecialchars($ngid);
 		}
 	}
 
@@ -209,7 +209,7 @@ function get_firewall_info() {
 	    (php_uname("m") == "arm64")) {
 		$thothid = system_get_thothid();
 		if (!empty($thothid)) {
-			$firewall_info .= "<br/>Netgate Crypto ID: " . htmlspecialchars(chop($thothid));
+			$firewall_info .= "<br/>Crypto ID: " . htmlspecialchars(chop($thothid));
 		}
 	}
 
