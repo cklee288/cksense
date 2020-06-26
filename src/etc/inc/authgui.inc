@@ -270,7 +270,7 @@ function display_login_form() {
 		$login_title = gettext(htmlspecialchars($config['system']['hostname'] . " - Login"));
 	} else {
 		$loginbannerstr = sprintf(gettext('Login to %1$s'), $g['product_name']);
-		$login_title = gettext("pfSense - Login");
+		$login_title = gettext("ckSense - Login");
 	}
 
 	$loginautocomplete = isset($config['system']['webgui']['loginautocomplete']) ? '' : 'autocomplete="off"';

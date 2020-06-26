@@ -4310,7 +4310,7 @@ msgstr ""
 
 #: src/usr/local/www/services_router_advertisements.php:123
 msgid ""
-"It is not required to activate DHCPv6 server on pfSense when set to "
+"It is not required to activate DHCPv6 server on ckSense when set to "
 "\"Managed\", \"Assisted\" or \"Stateless DHCP\", it can be another host on "
 "the network."
 msgstr ""
@@ -8103,7 +8103,7 @@ msgstr ""
 
 #: src/usr/local/www/services_unbound.php:393
 msgid ""
-"The local-zone type used for the pfSense system domain (System | General "
+"The local-zone type used for the ckSense system domain (System | General "
 "Setup | Domain).  Transparent is the default.  Local-Zone type descriptions "
 "are available in the unbound.conf(5) manual pages."
 msgstr ""
@@ -8800,7 +8800,7 @@ msgstr ""
 #: src/usr/local/www/system_certmanager.php:710
 msgid ""
 "Optionally paste a private key here. The key will be associated with the "
-"newly signed certificate in pfSense"
+"newly signed certificate in ckSense"
 msgstr ""
 
 #: src/usr/local/www/system_certmanager.php:714
@@ -9350,7 +9350,7 @@ msgid "Could not parse %1$s/wizards/%2$s file."
 msgstr ""
 
 #: src/usr/local/www/wizard.php:117
-msgid "Configuration changed via the pfSense wizard subsystem."
+msgid "Configuration changed via the ckSense wizard subsystem."
 msgstr ""
 
 #: src/usr/local/www/wizard.php:215
@@ -10697,12 +10697,12 @@ msgid "Installation Feedback"
 msgstr ""
 
 #: src/usr/local/www/system_advanced_misc.php:659
-msgid "Netgate Device ID"
+msgid "Device ID"
 msgstr ""
 
 #: src/usr/local/www/system_advanced_misc.php:662
 msgid ""
-"Enable this option to not send Netgate Device ID to pfSense as part of User-"
+"Enable this option to not send Device ID to ckSense as part of User-"
 "Agent header."
 msgstr ""
 
@@ -11925,7 +11925,7 @@ msgstr ""
 #: src/usr/local/www/services_acb_settings.php:252
 msgid ""
 "You may optionally provide an identifier which will be stored in plain text "
-"along with each encrypted backup. This may allow the Netgate support team to "
+"along with each encrypted backup. This may allow the CKSD support team to "
 "locate your key should you lose it."
 msgstr ""
 
@@ -14384,7 +14384,7 @@ msgstr ""
 
 #: src/usr/local/www/diag_backup.php:237
 msgid ""
-"The uploaded file does not appear to contain an encrypted pfsense "
+"The uploaded file does not appear to contain an encrypted ckSense "
 "configuration."
 msgstr ""
 
@@ -14393,7 +14393,7 @@ msgid "File decryption failed. Incorrect password or file is invalid."
 msgstr ""
 
 #: src/usr/local/www/diag_backup.php:246
-msgid "Upgrading m0n0wall configuration to pfsense."
+msgid "Upgrading m0n0wall configuration to ckSense."
 msgstr ""
 
 #: src/usr/local/www/diag_backup.php:261 src/usr/local/www/diag_backup.php:264
@@ -14437,7 +14437,7 @@ msgid "Imported m0n0wall configuration"
 msgstr ""
 
 #: src/usr/local/www/diag_backup.php:391
-msgid "The m0n0wall configuration has been restored and upgraded to pfSense."
+msgid "The m0n0wall configuration has been restored and upgraded to ckSense."
 msgstr ""
 
 #: src/usr/local/www/diag_backup.php:419
@@ -16648,7 +16648,7 @@ msgstr ""
 
 #: src/usr/local/www/firewall_virtual_ip_edit.php:451
 #, php-format
-msgid "For more information, visit the pfSense book section on %s"
+msgid "For more information, visit the ckSense book section on %s"
 msgstr ""
 
 #: src/usr/local/www/status_logs_filter_dynamic.php:381
@@ -16969,7 +16969,7 @@ msgstr ""
 #: src/usr/local/www/system_advanced_admin.php:706
 msgid ""
 "Select the preferred console if multiple consoles are present. The preferred "
-"console will show pfSense boot script output. All consoles display OS boot "
+"console will show ckSense boot script output. All consoles display OS boot "
 "messages, console messages, and the console menu."
 msgstr ""
 
@@ -20873,7 +20873,7 @@ msgstr ""
 
 #: src/usr/local/www/crash_reporter.php:98
 msgid ""
-"Debugging output can be collected to share with pfSense developers or others "
+"Debugging output can be collected to share with ckSense developers or others "
 "providing support or assistance."
 msgstr ""
 
@@ -21092,7 +21092,7 @@ msgstr ""
 #, php-format
 msgid ""
 "This option allows a predefined configuration to be selected. Default is the "
-"configuration of pfSense 2.1 and earlier (not recommended). Select Generic "
+"configuration of ckSense 2.1 and earlier (not recommended). Select Generic "
 "if the GPS is not listed.%1$sThe predefined configurations assume the GPS "
 "has already been set to NMEA mode."
 msgstr ""
@@ -22080,7 +22080,7 @@ msgid ""
 "If enabled no attempts will be made to ensure that the MAC address of "
 "clients stays the same while they are logged in. This is required when the "
 "MAC address of the client cannot be determined (usually because there are "
-"routers between pfSense and the clients). If this is enabled, RADIUS MAC "
+"routers between ckSense and the clients). If this is enabled, RADIUS MAC "
 "authentication cannot be used."
 msgstr ""
 
@@ -22360,7 +22360,7 @@ msgstr ""
 msgid ""
 "When enabled, clients will be disconnected after exceeding the amount of "
 "traffic, inclusive of both downloads and uploads, retrieved from the RADIUS "
-"pfSense-Max-Total-Octets attribute."
+"ckSense-Max-Total-Octets attribute."
 msgstr ""
 
 #: src/usr/local/www/services_captiveportal.php:960
@@ -22370,7 +22370,7 @@ msgstr ""
 #: src/usr/local/www/services_captiveportal.php:963
 msgid ""
 "When enabled, the bandwidth assigned to a client will be limited to the "
-"values retrieved from the RADIUS pfSense-Bandwidth-Max-Up and pfSense-"
+"values retrieved from the RADIUS ckSense-Bandwidth-Max-Up and ckSense-"
 "Bandwidth-Max-Down attributes or from the comparable WISPr attributes."
 msgstr ""
 
@@ -22473,7 +22473,7 @@ msgid ""
 "match the Common Name (CN) in the certificate (otherwise, the client browser "
 "will most likely display a security warning). Make sure captive portal "
 "clients can resolve this name in DNS and verify on the client that the IP "
-"resolves to the correct interface IP on pfSense."
+"resolves to the correct interface IP on ckSense."
 msgstr ""
 
 #: src/usr/local/www/services_captiveportal.php:1096
@@ -22588,7 +22588,7 @@ msgid "Paid Support"
 msgstr ""
 
 #: src/usr/local/www/head.inc:431
-msgid "pfSense Book"
+msgid "ckSense Book"
 msgstr ""
 
 #: src/usr/local/www/head.inc:432
@@ -24604,7 +24604,7 @@ msgstr ""
 
 #: src/usr/local/www/wizards/traffic_shaper_wizard_multi_all.inc:1769
 #: src/usr/local/www/wizards/traffic_shaper_wizard_dedicated.inc:1679
-msgid "Shaper configuration saved via pfSense traffic shaper wizard."
+msgid "Shaper configuration saved via ckSense traffic shaper wizard."
 msgstr ""
 
 #: src/usr/local/www/interfaces.php:427
@@ -27616,7 +27616,7 @@ msgstr ""
 msgid ""
 "Syslog sends UDP datagrams to port 514 on the specified remote syslog "
 "server, unless another port is specified. Be sure to set syslogd on the "
-"remote server to accept syslog messages from pfSense."
+"remote server to accept syslog messages from ckSense."
 msgstr ""
 
 #: src/usr/local/www/widgets/include/services_status.inc:24
@@ -28166,7 +28166,7 @@ msgid "Serial:"
 msgstr ""
 
 #: src/usr/local/www/widgets/widgets/system_information.widget.php:193
-msgid "Netgate Device ID:"
+msgid "Device ID:"
 msgstr ""
 
 #: src/usr/local/www/widgets/widgets/system_information.widget.php:216
@@ -28650,7 +28650,7 @@ msgstr ""
 
 #: src/usr/local/www/system_update_settings.php:247
 msgid ""
-"See \"playback gitsync --help\" in console \"PHP Shell + pfSense tools\" for "
+"See \"playback gitsync --help\" in console \"PHP Shell + ckSense tools\" for "
 "additional information."
 msgstr ""
 
@@ -29490,11 +29490,11 @@ msgid "PC Engines ALIX"
 msgstr ""
 
 #: src/etc/inc/config.inc:74
-msgid "Upgrading m0n0wall configuration to pfSense... "
+msgid "Upgrading m0n0wall configuration to ckSense... "
 msgstr ""
 
 #: src/etc/inc/config.inc:77
-msgid "ERROR!  Could not convert m0n0wall -> pfsense in config.xml"
+msgid "ERROR!  Could not convert m0n0wall -> ckSense in config.xml"
 msgstr ""
 
 #: src/etc/inc/config.inc:105 src/etc/inc/config.inc:123
@@ -32167,7 +32167,7 @@ msgid "Login to %1$s"
 msgstr ""
 
 #: src/etc/inc/authgui.inc:273
-msgid "pfSense - Login"
+msgid "ckSense - Login"
 msgstr ""
 
 #: src/etc/inc/authgui.inc:332
@@ -32637,7 +32637,7 @@ msgid "WebCfg - Crash reporter"
 msgstr ""
 
 #: src/etc/inc/priv.defs.inc:25
-msgid "Uploads crash reports to pfSense and or deletes crash reports."
+msgid "Uploads crash reports to ckSense and or deletes crash reports."
 msgstr ""
 
 #: src/etc/inc/priv.defs.inc:30
@@ -34333,11 +34333,11 @@ msgid "Allow access to the 'OpenVPN: Servers' page."
 msgstr ""
 
 #: src/etc/inc/priv.defs.inc:1313
-msgid "WebCfg - pfSense wizard subsystem"
+msgid "WebCfg - ckSense wizard subsystem"
 msgstr ""
 
 #: src/etc/inc/priv.defs.inc:1314
-msgid "Allow access to the 'pfSense wizard subsystem' page."
+msgid "Allow access to the 'ckSense wizard subsystem' page."
 msgstr ""
 
 #: src/etc/inc/priv.defs.inc:1319
@@ -35710,15 +35710,15 @@ msgid ""
 "<p align=\"center\"><font size=\"3\">Copyright &copy; 2004-2019. Electric "
 "Sheep Fencing LLC (\"ESF\"). All Rights Reserved.</p>\n"
 "\t\t\t\t\t<p align=\"center\"><strong>NO COMMERCIAL DISTRIBUTION OF THE "
-"PFSENSE&reg; CE SOFTWARE IS ALLOWED.</strong>\n"
+"CKSENSE CE SOFTWARE IS ALLOWED.</strong>\n"
 "\t\t\t\t\t</p>\n"
-"\t\t\t\t\t<p>pfSense&reg; is a federally and internationally registered "
-"trademark and service mark of ESF, and is exclusively licensed to Rubicon "
-"Communications, LLC (d/b/a Netgate) (\"Netgate\").</p>\n"
-"\t\t\t\t\t<p>Any unauthorized use of the pfSense&reg; mark is prohibited by "
-"United States and international law. Please refer to the Netgate <a href="
-"\"https://www.pfsense.org/trademarks.html\" target=\"_blank\"> Trademark "
-"Usage Guidelines</a> for how to properly use the mark.</p>\n"
+"\t\t\t\t\t<p>ckSense is a CKSD derived opensource firewall. "
+"This brand is registered under CKSD "
+"(d/b/a CKSD) (\"CKSD\").</p>\n"
+"\t\t\t\t\t<p>Any unauthorized use of the ckSense mark is prohibited. "
+"Please refer to the CKSD <a href="
+"\"https://www.cksdnow.com/index.html\" target=\"_blank\"> Info "
+"Usage Guidelines</a>.</p>\n"
 "\t\t\t\t\t</div>\n"
 "\t\t\t\t\t<div class=\"modal-footer\" style=\"background-color:#1e3f75; "
 "color:white;\">\n"
@@ -36412,7 +36412,7 @@ msgstr ""
 
 #: src/usr/local/www/system_usermanager_settings.php:242
 msgid ""
-"<span id=\"ldaptestop\">Testing pfSense LDAP settings... One moment please..."
+"<span id=\"ldaptestop\">Testing ckSense LDAP settings... One moment please..."
 ""
 msgstr ""
 
@@ -36469,7 +36469,7 @@ msgid "Use memory file system for /tmp and /var"
 msgstr ""
 
 #: src/usr/local/www/system_advanced_misc.php:660
-msgid "Do NOT send Netgate Device ID with user agent"
+msgid "Do NOT send Device ID with user agent"
 msgstr ""
 
 #: src/usr/local/www/system_hasync.php:121
@@ -37325,12 +37325,12 @@ msgid "Use RADIUS Session-Timeout attributes"
 msgstr ""
 
 #: src/usr/local/www/services_captiveportal.php:954
-msgid "Use RADIUS pfSense-Max-Total-Octets attribute"
+msgid "Use RADIUS ckSense-Max-Total-Octets attribute"
 msgstr ""
 
 #: src/usr/local/www/services_captiveportal.php:961
 msgid ""
-"Use RADIUS pfSense-Bandwidth-Max-Up and pfSense-Bandwidth-Max-Down "
+"Use RADIUS ckSense-Bandwidth-Max-Up and ckSense-Bandwidth-Max-Down "
 "attributes"
 msgstr ""
 
@@ -37563,7 +37563,7 @@ msgid "FreeBSD default"
 msgstr ""
 
 #: src/usr/local/www/interfaces.php:2199
-msgid "pfSense Default"
+msgid "ckSense Default"
 msgstr ""
 
 #: src/usr/local/www/interfaces.php:2207
