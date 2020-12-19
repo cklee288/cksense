@@ -285,6 +285,20 @@ if (is_array($config['hasync'])) {
 		}
 		$sections[] = 'gateways';
 	}
+
+    /* edit by CKLee 19Dec2020 */
+	if ($hasync['synchronizedyndnses'] != "") {
+			if (!is_array($config['dyndnses'])) {
+					$config['dyndnses'] = array();
+			}
+			if (!is_array($config['dyndnses']['dyndns'])) {
+					$config['dyndnses']['dyndns'] = array();
+			}
+			$sections[] = 'dyndnses';
+	}
+	/* end edit by CKLee 19Dec2020 */
+
+
 	if ($hasync['synchronizevirtualip'] != "") {
 		if (!is_array($config['virtualip'])) {
 			$config['virtualip'] = array();
