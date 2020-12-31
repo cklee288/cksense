@@ -206,6 +206,14 @@ function carp_sync_xml($sections) {
 				$xml['system'][$section] = $config_copy['system'][$section];
 				$xml['system']['nextgid'] = $config_copy['system']['nextgid'];
 				break;
+			/* start CKLEE for WAN1 and WAN2 (OPT2) sync 31Dec2020 */
+			case 'wan':
+				$xml['interfaces'][$section] = $config_copy['interfaces'][$section];
+				break;
+			case 'opt2':
+				$xml['interfaces'][$section] = $config_copy['interfaces'][$section];
+				break;
+			/* End CKLEE for WAN1 and WAN2 (OPT2) sync 31Dec2020 */
 			case 'authserver':
 				$xml['system'][$section] = $config_copy['system'][$section];
 				break;
@@ -298,6 +306,25 @@ if (is_array($config['hasync'])) {
 	}
 	/* end edit by CKLee 19Dec2020 */
 
+
+	/* edit by CKLee 31Dec2020 enable ppps sync */
+	if ($hasync['synchronizeppps'] != "") {
+		if (!is_array($config['ppps'])) {
+				$config['ppps'] = array();
+		}
+		if (!is_array($config['ppps']['ppp'])) {
+				$config['ppps']['ppp'] = array();
+		}
+		$sections[] = 'ppps';
+	}
+	/* end edit by CKLee 31Dec2020 */
+
+	/*edit by CKLee 31Dec2020 enable wans sync */
+	if ($hasync['synchronizewans'] != "") {
+		$sections[] = 'wan';
+		$sections[] = 'opt2';
+	}
+	/* end edit by CKLee 31Dec2020 */
 
 	if ($hasync['synchronizevirtualip'] != "") {
 		if (!is_array($config['virtualip'])) {

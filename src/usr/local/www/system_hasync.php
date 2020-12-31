@@ -51,7 +51,9 @@ $checkbox_names = array(
 	'synchronizetrafficshaperlimiter',
 	'synchronizednsforwarder',
 	'synchronizecaptiveportal',
-	'synchronizedyndnses');
+	'synchronizedyndnses',
+	'synchronizeppps',
+	'synchronizewans');
 
 
 if ($_POST) {
@@ -211,6 +213,24 @@ $group->add(new Form_MultiCheckbox(
 	($pconfig['synchronizedyndnses'] === 'on'),
 	'on'
 ));
+
+// Edit by CKLee 31Dec2020
+$group->add(new Form_MultiCheckbox(
+	'synchronizeppps',
+	'Synchronize ppps',
+	'ppps Lists',
+	($pconfig['synchronizeppps'] === 'on'),
+	'on'
+));
+
+$group->add(new Form_MultiCheckbox(
+	'synchronizewans',
+	'Synchronize wans',
+	'wans Lists',
+	($pconfig['synchronizewans'] === 'on'),
+	'on'
+));
+// End Edit by CKLee 31Dec2020
 
 
 $group->add(new Form_MultiCheckbox(
