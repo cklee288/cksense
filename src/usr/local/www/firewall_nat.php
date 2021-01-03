@@ -44,9 +44,19 @@ init_config_arr(array('nat', 'rule'));
 $a_nat = &$config['nat']['rule'];
 $a_separators = &$config['nat']['separator'];
 
-/* update rule order, POST[rule] is an array of ordered IDs */
+$specialsrcdst = explode(" ", "any pptp pppoe l2tp openvpn");
+$ifdisp = get_configured_interface_with_descr();
+foreach ($ifdisp as $kif => $kdescr) {
+	$specialsrcdst[] = "{$kif}";
+	$specialsrcdst[] = "{$kif}ip";
+}
+
 if (array_key_exists('order-store', $_REQUEST) && have_natpfruleint_access($natent['interface'])) {
-	if (is_array($_REQUEST['rule']) && !empty($_REQUEST['rule'])) {
+	$updated = false;
+	$dirty = false;
+
+	/* update rule order, POST[rule] is an array of ordered IDs */
+	if (is_array($_POST['rule']) && !empty($_POST['rule'])) {
 		$a_nat_new = array();
 
 		// if a rule is not in POST[rule], it has been deleted by the user
@@ -54,30 +64,40 @@ if (array_key_exists('order-store', $_REQUEST) && have_natpfruleint_access($nate
 			$a_nat_new[] = $a_nat[$id];
 		}
 
-		$a_nat = $a_nat_new;
-
-
-		$config['nat']['separator'] = "";
-
-		if ($_POST['separator']) {
-			$idx = 0;
-
-			if (!is_array($config['nat']['separator'])) {
-				$config['nat']['separator'] = array();
-			}
-
-			foreach ($_POST['separator'] as $separator) {
-				$config['nat']['separator']['sep' . $idx++] = $separator;
-			}
+		if ($a_nat !== $a_nat_new) {
+			$a_nat = $a_nat_new;
+			$dirty = true;
 		}
-
-		if (write_config()) {
-			mark_subsystem_dirty('filter');
-		}
-
-		header("Location: firewall_nat.php");
-		exit;
 	}
+
+	/* update separator order, POST[separator] is an array of ordered IDs */
+	if (is_array($_POST['separator']) && !empty($_POST['separator'])) {
+		$new_separator = array();
+		$idx = 0;
+
+		foreach ($_POST['separator'] as $separator) {
+			$new_separator['sep' . $idx++] = $separator;
+		}
+
+		if ($a_separators !== $new_separator) {
+			$a_separators = $new_separator;
+			$updated = true;
+		}			
+	} else if (!empty($a_separators)) {
+		$a_separators = "";
+		$updated = true;
+	}
+
+	if ($updated || $dirty) {
+		if (write_config("NAT: Rule order changed")) {
+			if ($dirty) {
+				mark_subsystem_dirty('natconf');
+			}
+		}
+	}
+
+	header("Location: firewall_nat.php");
+	exit;
 }
 
 /* if a custom message has been passed along, lets process it */
@@ -115,7 +135,7 @@ if (($_POST['act'] == "del") && have_natpfruleint_access($natent['interface'])) 
 		$mvnrows = -1;
 		move_separators($a_separators, $ridx, $mvnrows);
 
-		if (write_config()) {
+		if (write_config("NAT: Rule deleted")) {
 			mark_subsystem_dirty('natconf');
 			if ($want_dirty_filter) {
 				mark_subsystem_dirty('filter');
@@ -152,7 +172,7 @@ if (isset($_POST['del_x']) && have_natpfruleint_access($natent['interface'])) {
 			$num_deleted++;
 		}
 
-		if (write_config()) {
+		if (write_config("NAT: Rule deleted")) {
 			mark_subsystem_dirty('natconf');
 		}
 
@@ -279,6 +299,15 @@ foreach ($a_nat as $natent):
 	} else {
 		$iconfn = "pass";
 		$trclass = '';
+	}
+
+	if (is_specialnet($natent['target'])) {
+		foreach ($ifdisp as $kif => $kdescr) {
+			if ($natent['target'] == "{$kif}ip") {
+				$natent['target'] = $kdescr . ' address';
+				break;
+			}
+		}
 	}
 ?>
 

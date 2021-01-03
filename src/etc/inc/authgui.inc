@@ -271,8 +271,8 @@ function display_login_form() {
 		$loginbannerstr = sprintf(gettext('%1$s.%2$s'), htmlspecialchars($config['system']['hostname']), htmlspecialchars($config['system']['domain']));
 		$login_title = gettext(htmlspecialchars($config['system']['hostname'] . " - Login"));
 	} else {
-		$loginbannerstr = sprintf(gettext('Login to %1$s'), $g['product_name']);
-		$login_title = gettext("pfSense - Login");
+		$loginbannerstr = sprintf(gettext('Login to %1$s'), $g['product_label']);
+		$login_title = sprintf(gettext("%s - Login"), $g['product_label']);
 	}
 
 	$loginautocomplete = isset($config['system']['webgui']['loginautocomplete']) ? '' : 'autocomplete="off"';
@@ -367,6 +367,24 @@ function display_login_form() {
 	            </div>
 	        </footer>
 	    </div>
+
+		<script type="text/javascript">
+		//<![CDATA[
+			/* Prevent duplicate submission  */
+			events.push(function() {
+				var submitted = false;
+
+				$(form).submit(function(e){
+					if (submitted) {
+						e.preventDefault();
+					} else {
+						submitted = true;
+						// Form is submitted because default action is not prevented
+					}
+				});
+			});
+		//]]>
+		</script>
 
 	    <script src="/vendor/jquery/jquery-3.5.1.min.js?v=<?=filemtime('/usr/local/www/vendor/jquery/jquery-3.5.1.min.js')?>"></script>
 		<script src="/vendor/bootstrap/js/bootstrap.min.js?v=<?=filemtime('/usr/local/www/vendor/bootstrap/js/bootstrap.min.js')?>"></script>

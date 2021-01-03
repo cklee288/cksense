@@ -38,6 +38,8 @@ require_once('rrd.inc');
 require_once("shaper.inc");
 require_once("util.inc");
 
+global $ddnsdomainkeyalgorithms;
+
 if (!$g['services_dhcp_server_enable']) {
 	header("Location: /");
 	exit;
@@ -402,8 +404,8 @@ if (isset($_POST['save'])) {
 		if (!$_POST['ddnsdomainkeyname'] || !$_POST['ddnsdomainkeyalgorithm'] || !$_POST['ddnsdomainkey']) {
 			$input_errors[] = gettext("A valid domain key name, algorithm and secret must be specified.");
 		}
-		if (preg_match('/[^A-Za-z0-9\-_]/', $_POST['ddnsdomainkeyname'])) {
-			$input_errors[] = gettext("The domain key name may only contain the characters a-z, A-Z, 0-9, '-' and '_'");
+		if (preg_match('/[^A-Za-z0-9\.\-\_]/', $_POST['ddnsdomainkeyname'])) {
+			$input_errors[] = gettext("The domain key name may only contain the characters a-z, A-Z, 0-9, '-', '_' and '.'");
 		}
 		if ($_POST['ddnsdomainkey'] && !base64_decode($_POST['ddnsdomainkey'], true)) {
 			$input_errors[] = gettext("The domain key secret must be a Base64 encoded value.");
@@ -830,7 +832,7 @@ if ((isset($_POST['save']) || isset($_POST['apply'])) && (!$input_errors)) {
 if ($act == "delpool") {
 	if ($a_pools[$_POST['id']]) {
 		unset($a_pools[$_POST['id']]);
-		write_config();
+		write_config("DHCP Server pool deleted");
 		header("Location: services_dhcp.php?if={$if}");
 		exit;
 	}
@@ -843,7 +845,7 @@ if ($act == "del") {
 			mwexec("/usr/sbin/arp -d " . escapeshellarg($a_maps[$_POST['id']]['ipaddr']));
 		}
 		unset($a_maps[$_POST['id']]);
-		write_config();
+		write_config("DHCP Server static map deleted");
 		if (isset($config['dhcpd'][$if]['enable'])) {
 			mark_subsystem_dirty('staticmaps');
 			if (isset($config['dnsmasq']['enable']) && isset($config['dnsmasq']['regdhcpstatic'])) {
@@ -1150,7 +1152,8 @@ $section->addInput(new Form_Input(
 	'text',
 	$pconfig['omapi_port']
 ))->setAttribute('placeholder', 'OMAPI Port')
-  ->setHelp('Set the port that OMAPI will listen on. The default port is 7911, leave blank to disable.');
+  ->setHelp('Set the port that OMAPI will listen on. The default port is 7911, leave blank to disable.' .
+	    'Only the first OMAPI configuration is used.');
 
 $group = new Form_Group('OMAPI Key');
 
@@ -1325,14 +1328,7 @@ $section->addInput(new Form_Select(
 	'ddnsdomainkeyalgorithm',
 	'Key algorithm',
 	$pconfig['ddnsdomainkeyalgorithm'],
-	array(
-		'hmac-md5' => 'HMAC-MD5 (legacy default)',
-		'hmac-sha1' => 'HMAC-SHA1',
-		'hmac-sha224' => 'HMAC-SHA224',
-		'hmac-sha256' => 'HMAC-SHA256 (current bind9 default)',
-		'hmac-sha384' => 'HMAC-SHA384',
-		'hmac-sha512' => 'HMAC-SHA512 (most secure)',
-	)
+	$ddnsdomainkeyalgorithms
 ));
 
 $section->addInput(new Form_Input(

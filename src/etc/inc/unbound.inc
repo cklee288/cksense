@@ -231,6 +231,12 @@ EOF;
 		$bindintcfg .= "interface-automatic: " . (isset($unboundcfg['enablessl']) ? "no" : "yes") . "\n";
 	} else {
 		foreach ($active_interfaces as $ubif) {
+			/* Do not bind to disabled/nocarrier interfaces,
+			 * see https://redmine.pfsense.org/issues/11087 */
+			$ifinfo = get_interface_info($ubif);
+			if ($ifinfo && (($ifinfo['status'] != 'up') || !$ifinfo['enable'])) {
+				continue;
+			}
 			if (is_ipaddr($ubif)) {
 				$bindints[] = $ubif;
 			} else {
@@ -287,6 +293,10 @@ EOF;
 		$outgoingints = "# Outgoing interfaces to be used\n";
 		$outgoing_interfaces = explode(",", $unboundcfg['outgoing_interface']);
 		foreach ($outgoing_interfaces as $outif) {
+			$ifinfo = get_interface_info($outif);
+			if ($ifinfo && (($ifinfo['status'] != 'up') || !$ifinfo['enable'])) {
+				continue;
+			}
 			$outip = get_interface_ip($outif);
 			if (is_ipaddr($outip)) {
 				$outgoingints .= "outgoing-interface: $outip\n";
@@ -357,28 +367,12 @@ include: {$g['unbound_chroot_path']}{$cfgsubdir}/openvpn.*.conf
 EOD;
 	} else {
 		$openvpn_clients_conf = '';
+		unlink_if_exists("{$g['unbound_chroot_path']}{$cfgsubdir}/openvpn.*.conf");
 	}
 
 	// Set up forwarding if it is configured
 	if (isset($unboundcfg['forwarding'])) {
-		$dnsservers = array();
-		if (isset($config['system']['dnsallowoverride'])) {
-			$ns = array_unique(get_nameservers());
-			foreach ($ns as $nameserver) {
-				if ($nameserver) {
-					$dnsservers[] = $nameserver;
-				}
-			}
-		} else {
-			$ns = array();
-		}
-		$sys_dnsservers = array_unique(get_dns_servers());
-		foreach ($sys_dnsservers as $sys_dnsserver) {
-			if ($sys_dnsserver && (!in_array($sys_dnsserver, $ns))) {
-				$dnsservers[] = $sys_dnsserver;
-			}
-		}
-
+		$dnsservers = get_dns_nameservers(false, true);
 		if (!empty($dnsservers)) {
 			$forward_conf .=<<<EOD
 # Forwarding
@@ -611,10 +605,10 @@ function do_as_unbound_user($cmd, $param1 = "") {
 			mwexec("/usr/local/sbin/unbound -c {$g['unbound_chroot_path']}/unbound.conf");
 			break;
 		case "stop":
-			mwexec("echo '/usr/local/sbin/unbound-control -c {$g['unbound_chroot_path']}/unbound.conf stop' | /usr/bin/su -m unbound", true);
+			mwexec("/usr/bin/su -m unbound -c '/usr/local/sbin/unbound-control -c {$g['unbound_chroot_path']}/unbound.conf stop'", true);
 			break;
 		case "reload":
-			mwexec("echo '/usr/local/sbin/unbound-control -c {$g['unbound_chroot_path']}/unbound.conf reload' | /usr/bin/su -m unbound", true);
+			mwexec("/usr/bin/su -m unbound -c '/usr/local/sbin/unbound-control -c {$g['unbound_chroot_path']}/unbound.conf reload'", true);
 			break;
 		case "unbound-anchor":
 			$root_key_file = "{$g['unbound_chroot_path']}{$param1}/root.key";
@@ -626,14 +620,14 @@ function do_as_unbound_user($cmd, $param1 = "") {
 					unlink_if_exists($root_key_file);
 				}
 			}
-			mwexec("echo '/usr/local/sbin/unbound-anchor -a {$root_key_file}' | /usr/bin/su -m unbound", true);
+			mwexec("/usr/bin/su -m unbound -c '/usr/local/sbin/unbound-anchor -a {$root_key_file}'", true);
 			// Only sync the file if this is the real (default) one, not a test one.
 			if ($param1 == "") {
 				//pfSense_fsync($root_key_file);
 			}
 			break;
 		case "unbound-control-setup":
-			mwexec("echo '/usr/local/sbin/unbound-control-setup -d {$g['unbound_chroot_path']}{$param1}' | /usr/bin/su -m unbound", true);
+			mwexec("/usr/bin/su -m unbound -c '/usr/local/sbin/unbound-control-setup -d {$g['unbound_chroot_path']}{$param1}'", true);
 			break;
 		default:
 			break;

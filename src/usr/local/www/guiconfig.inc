@@ -1071,7 +1071,7 @@ function alias_info_popup($alias_id) {
 		foreach ($alias_addresses as $ap) {
 			$content .= "	<tr>\n";
 			$content .= "		<td>\n";
-			$content .= 			idn_to_utf8($ap);
+			$content .= 			alias_idn_to_utf8($ap);
 			$content .=	"		</td>\n";
 			$content .= "		<td style='padding-left: 10px;'>\n";
 			$content .= 			htmlspecialchars($alias_details[$idx]);
@@ -1081,44 +1081,45 @@ function alias_info_popup($alias_id) {
 		}
 
 		$content .= "</tbody>\n";
-		$content .= "<table>\n";
+		$content .= "</table>\n";
 	}
 
 	return $content;
 }
 
-function gateway_info_popup($gateway) {
-	global $config;
-	init_config_arr(array('gateways', 'gateway_item'));
+function gateway_info_popup($showgw) {
+	global $config, $user_settings;
+
 	init_config_arr(array('gateways', 'gateway_group'));
+	$a_gateways = return_gateways_array();
+	$gateways_status = return_gateways_status(true);
 
 	$content = "";
-	$gateways = array();
+	$gws = array();
 	$bgdanger = array('force_down', 'down', 'highloss', 'highdelay');
 	$bgwarning = array('loss', 'delay');
 	$bgsuccess = array('none');
 	$bgcolor = "bg-info";
 
-	if (is_array($config['gateways']['gateway_item'])) {
-		foreach($config['gateways']['gateway_item'] as $i => $item) {
-			if ($item['name'] == $gateway) {
-				$gateways[] = $item['name'];
+	if (is_array($a_gateways)) {
+		foreach ($a_gateways as $i => $gateway) {
+			if ($gateway['name'] == $showgw) {
+				$gws[] = $gateway['name'];
 			}
 		}
 	}
 	if (is_array($config['gateways']['gateway_group'])) {
 		foreach($config['gateways']['gateway_group'] as $gwgroup) {
-			if ($gwgroup['name'] == $gateway) {
+			if ($gwgroup['name'] == $showgw) {
 				foreach ($gwgroup['item'] as $member) {
 					$membersplit = explode("|", $member);
-					$gateways[] = $membersplit[0];
+					$gws[] = $membersplit[0];
 				}
 			}
 		}
 	}
 
-	if (!empty($gateways)) {
-		$gateways_status = return_gateways_status(true);
+	if (!empty($gws)) {
 		$content .= "<table>\n";
 		$content .= "<thead>\n";
 		$content .= "<tr>\n";
@@ -1126,7 +1127,7 @@ function gateway_info_popup($gateway) {
 		$content .= "<th style='padding-left: 10px;'>" . gettext("Gateway") . "</th></tr>\n";
 		$content .= "</thead>\n";
 		$content .= "<tbody>\n";
-		foreach ($gateways as $gw) {
+		foreach ($gws as $gw) {
 			foreach ($gateways_status as $gwstatus) {
 				if ($gwstatus['name'] == $gw) {
 					if (in_array($gwstatus['status'], $bgdanger)) {
@@ -1154,7 +1155,9 @@ function gateway_info_popup($gateway) {
 			$idx++;
 		}
 		$content .= "</tbody>\n";
-		$content .= "<table>\n";
+		$content .= "</table>\n";
+	} else {
+		return;
 	}
 
 	return $content;

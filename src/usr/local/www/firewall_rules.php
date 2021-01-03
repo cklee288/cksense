@@ -43,14 +43,16 @@ $ShXmoveTitle = gettext("Move checked rules below this one. Release shift to mov
 
 $shortcut_section = "firewall";
 
-function get_pf_rules($rules, $tracker) {
+function get_pf_rules($rules, $tracker_start, $tracker_end) {
 
-	if ($rules == NULL || !is_array($rules))
+	if ($rules == NULL || !is_array($rules)) {
 		return (NULL);
+	}
 
 	$arr = array();
 	foreach ($rules as $rule) {
-		if ($rule['tracker'] === $tracker) {
+		if ($rule['tracker'] >= $tracker_start &&
+		    $rule['tracker'] <= $tracker_end) {
 			$arr[] = $rule;
 		}
 	}
@@ -61,8 +63,18 @@ function get_pf_rules($rules, $tracker) {
 	return ($arr);
 }
 
-function print_states($tracker) {
+function print_states($tracker_start, $tracker_end = -1) {
 	global $rulescnt;
+
+	if (empty($tracker_start)) {
+		return;
+	}
+
+	if ($tracker_end === -1) {
+		$tracker_end = $tracker_start;
+	} elseif ($tracker_end < $tracker_start) {
+		return;
+	}
 
 	$rulesid = "";
 	$bytes = 0;
@@ -70,7 +82,7 @@ function print_states($tracker) {
 	$packets = 0;
 	$evaluations = 0;
 	$stcreations = 0;
-	$rules = get_pf_rules($rulescnt, $tracker);
+	$rules = get_pf_rules($rulescnt, $tracker_start, $tracker_end);
 	if (is_array($rules)) {
 		foreach ($rules as $rule) {
 			$bytes += $rule['bytes'];
@@ -85,13 +97,22 @@ function print_states($tracker) {
 		}
 	}
 
-	$trackertext = !empty($tracker) ? "Tracking ID: {$tracker}<br>" : "";
-	printf("<a href=\"diag_dump_states.php?ruleid=%s\" data-toggle=\"popover\" data-trigger=\"hover focus\" title=\"%s\" ",
-	    $rulesid, gettext("States details"));
-	printf("data-content=\"{$trackertext}evaluations: %s<br>packets: %s<br>bytes: %s<br>states: %s<br>state creations: %s\" data-html=\"true\" usepost>",
-	    format_number($evaluations), format_number($packets), format_bytes($bytes),
-	    format_number($states), format_number($stcreations));
-	printf("%s/%s</a><br>", format_number($states), format_bytes($bytes));
+	$trackertext = "Tracking ID: {$tracker_start}";
+	if ($tracker_end != $tracker_start) {
+		$trackertext .= '-' . $tracker_end;
+	}
+	$trackertext .= "<br />";
+
+	printf("<a href=\"diag_dump_states.php?ruleid=%s\" " .
+	    "data-toggle=\"popover\" data-trigger=\"hover focus\" " .
+	    "title=\"%s\" ", $rulesid, gettext("States details"));
+	printf("data-content=\"{$trackertext}evaluations: %s<br />packets: " .
+	    "%s<br />bytes: %s<br />states: %s<br />state creations: " .
+	    "%s\" data-html=\"true\" usepost>",
+	    format_number($evaluations), format_number($packets),
+	    format_bytes($bytes), format_number($states),
+	    format_number($stcreations));
+	printf("%s/%s</a><br />", format_number($states), format_bytes($bytes));
 }
 
 function delete_nat_association($id) {
@@ -213,6 +234,8 @@ if (isset($_POST['del_x'])) {
 		exit;
 	}
 } else if ($_POST['order-store']) {
+	$updated = false;
+	$dirty = false;
 
 	/* update rule order, POST[rule] is an array of ordered IDs */
 	if (is_array($_POST['rule']) && !empty($_POST['rule'])) {
@@ -245,32 +268,42 @@ if (isset($_POST['del_x'])) {
 			}
 		}
 
-		$a_filter = $a_filter_new;
-
-		$config['filter']['separator'][strtolower($if)] = "";
-
-		if ($_POST['separator']) {
-			$idx = 0;
-			if (!is_array($config['filter']['separator'])) {
-				$config['filter']['separator'] = array();
-			}
-
-			foreach ($_POST['separator'] as $separator) {
-				if (!is_array($config['filter']['separator'][strtolower($separator['if'])]))  {
-					$config['filter']['separator'][strtolower($separator['if'])] = array();
-				}
-
-				$config['filter']['separator'][strtolower($separator['if'])]['sep' . $idx++] = $separator;
-			}
+		if ($a_filter !== $a_filter_new) {
+			$a_filter = $a_filter_new;
+			$dirty = true;
 		}
-
-		if (write_config(gettext("Firewall: Rules - reordered firewall rules."))) {
-			mark_subsystem_dirty('filter');
-		}
-
-		header("Location: firewall_rules.php?if=" . htmlspecialchars($if));
-		exit;
 	}
+
+	$a_separators = &$config['filter']['separator'][strtolower($if)];
+
+	/* update separator order, POST[separator] is an array of ordered IDs */
+	if (is_array($_POST['separator']) && !empty($_POST['separator'])) {
+		$new_separator = array();
+		$idx = 0;
+
+		foreach ($_POST['separator'] as $separator) {
+			$new_separator['sep' . $idx++] = $separator;
+		}
+
+		if ($a_separators !== $new_separator) {
+			$a_separators = $new_separator;
+			$updated = true;
+		}
+	} else if (!empty($a_separators)) {
+		$a_separators = "";
+		$updated = true;
+	}
+
+	if ($updated || $dirty) {
+		if (write_config(gettext("Firewall: Rules - reordered firewall rules."))) {
+			if ($dirty) {
+				mark_subsystem_dirty('filter');
+			}
+		}
+	}
+
+	header("Location: firewall_rules.php?if=" . htmlspecialchars($if));
+	exit;
 }
 
 $tab_array = array(array(gettext("Floating"), ("FloatingRules" == $if), "firewall_rules.php?if=FloatingRules"));
@@ -395,7 +428,7 @@ if ($if == "FloatingRules") {
 					<tr id="antilockout">
 						<td></td>
 						<td title="<?=gettext("traffic is passed")?>"><i class="fa fa-check text-success"></i></td>
-						<td><?php print_states(intval(ANTILOCKOUT_TRACKER)); ?></td>
+						<td><?php print_states(intval(ANTILOCKOUT_TRACKER_START), intval(ANTILOCKOUT_TRACKER_END)); ?></td>
 						<td>*</td>
 						<td>*</td>
 						<td>*</td>
@@ -414,7 +447,7 @@ if ($if == "FloatingRules") {
 					<tr id="private">
 						<td></td>
 						<td title="<?=gettext("traffic is blocked")?>"><i class="fa fa-times text-danger"></i></td>
-						<td><?php print_states(intval(RFC1918_TRACKER)); ?></td>
+						<td><?php print_states(intval(RFC1918_TRACKER_START), intval(RFC1918_TRACKER_END)); ?></td>
 						<td>*</td>
 						<td><?=gettext("RFC 1918 networks");?></td>
 						<td>*</td>
@@ -433,7 +466,7 @@ if ($if == "FloatingRules") {
 					<tr id="bogons">
 						<td></td>
 						<td title="<?=gettext("traffic is blocked")?>"><i class="fa fa-times text-danger"></i></td>
-						<td><?php print_states(intval(BOGONS_TRACKER)); ?></td>
+						<td><?php print_states(intval(BOGONS_TRACKER_START), intval(BOGONS_TRACKER_END)); ?></td>
 						<td>*</td>
 						<td><?=sprintf(gettext("Reserved%sNot assigned by IANA"), "<br />");?></td>
 						<td>*</td>
@@ -694,7 +727,20 @@ foreach ($a_filter as $filteri => $filterent):
 					}
 				}
 				if (!empty($selected_descs)) {
-					echo implode('<br/>', $selected_descs);
+					$desclist = '';
+					$desclength = 0;
+					foreach ($selected_descs as $descid => $desc) {
+						$desclength += strlen($desc);
+						if ($desclength > 18) {
+							$desclist .= ',<br/>';
+							$desclength = 0;
+						} elseif ($desclist) {
+							$desclist .= ', ';
+							$desclength += 2;
+						}
+						$desclist .= $desc;
+					}
+					echo $desclist;
 				}
 			}
 	?>
@@ -778,13 +824,17 @@ foreach ($a_filter as $filteri => $filterent):
 							<?php endif; ?>
 						</td>
 						<td>
-							<?php if (isset($config['interfaces'][$filterent['gateway']]['descr'])):?>
-								<?=str_replace('_', '_<wbr>', htmlspecialchars($config['interfaces'][$filterent['gateway']]['descr']))?>
+							<?php if (isset($filterent['gateway'])): ?>
+								<span data-toggle="popover" data-trigger="hover focus" title="<?=gettext('Gateways details')?>" data-content="<?=gateway_info_popup($filterent['gateway'])?>" data-html="true">
 							<?php else: ?>
-							<span data-toggle="popover" data-trigger="hover focus" title="<?=gettext('Gateways details')?>" data-content="<?=gateway_info_popup($filterent['gateway'])?>" data-html="true">
-								<?=htmlspecialchars(pprint_port($filterent['gateway']))?>
-							</span>
+								<span>
 							<?php endif; ?>
+								<?php if (isset($config['interfaces'][$filterent['gateway']]['descr'])): ?>
+									<?=str_replace('_', '_<wbr>', htmlspecialchars($config['interfaces'][$filterent['gateway']]['descr']))?>
+								<?php else: ?>
+									<?=htmlspecialchars(pprint_port($filterent['gateway']))?>
+								<?php endif; ?>
+							</span>
 						</td>
 						<td>
 							<?php

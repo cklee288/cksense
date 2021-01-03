@@ -32,9 +32,10 @@ if (!function_exists("console_configure")) {
 }
 
 /* Upgrade functions must be named:
-*    upgrade_XXX_to_YYY
-	* where XXX == previous version, zero padded, and YYY == next version, zero padded
-	*/
+ *    upgrade_XXX_to_YYY
+ * where XXX == previous version, zero padded, and YYY == next version, zero
+ * padded
+ */
 function upgrade_010_to_011() {
 	global $config;
 	$opti = 1;
@@ -632,7 +633,7 @@ function upgrade_039_to_040() {
 		$config['system']['user'][0]['priv'][2]['descr'] = gettext("Indicates whether this user is able to login for example via SSH.");
 		$config['system']['user'][0]['priv'][3]['id'] = "copyfiles";
 		$config['system']['user'][0]['priv'][3]['name'] = "Is allowed to copy files";
-		$config['system']['user'][0]['priv'][3]['descr'] = sprintf(gettext("Indicates whether this user is allowed to copy files onto the %s appliance via SCP/SFTP."), $g['product_name']);
+		$config['system']['user'][0]['priv'][3]['descr'] = sprintf(gettext("Indicates whether this user is allowed to copy files onto the %s appliance via SCP/SFTP."), $g['product_label']);
 		$config['system']['user'][0]['priv'][4]['id'] = "isroot";
 		$config['system']['user'][0]['priv'][4]['name'] = "Is root user";
 		$config['system']['user'][0]['priv'][4]['descr'] = gettext("This user is associated with the UNIX root user (this privilege should only be associated with one single user).");
@@ -6244,6 +6245,111 @@ function upgrade_205_to_206() {
 	 * be updated before the reboot.
 	 */
 	console_configure();
+}
+
+function upgrade_206_to_207() {
+	/*
+	 * Trigger a boot loader settings update to make sure the contents will
+	 * be updated before the reboot.
+	 */
+	console_configure();
+}
+
+function upgrade_207_to_208() {
+	global $config;
+
+	$config['system']['hn_altq_enable'] = true;
+}
+
+/* Update IPsec VTI to new VTIMAP format 
+ * https://redmine.pfsense.org/issues/9592
+ */
+function upgrade_208_to_209() {
+	require_once("interfaces.inc");
+	global $config;
+
+	init_config_arr(array('ipsec', 'vtimaps', 'item'));
+
+	if (!is_array($config['ipsec']['phase1']) ||
+	    !is_array($config['ipsec']['phase2'])) {
+		return;
+	}
+
+	foreach ($config['ipsec']['phase1'] as $ph1ent) {
+		if (!isset($ph1ent['mobile']) &&
+		    ($ph1ent['iketype'] == 'ikev1' ||
+		    isset($ph1ent['splitconn']))) {
+			$vtisubnet_spec = ipsec_vti($ph1ent, true, false);
+			if (empty($vtisubnet_spec)) {
+				continue;
+			}
+			foreach ($vtisubnet_spec as $idx => $vtisub) {
+				$config['ipsec']['vtimaps']['item'][] = array(
+					"reqid" => $ph1ent['ikeid'],
+					"index" => $idx,
+					"ifnum" => "{$ph1ent['ikeid']}00{$idx}"
+				);
+			}
+		} else {
+			$config['ipsec']['vtimaps']['item'][] = array(
+				"reqid" => $ph1ent['ikeid'],
+				"index" => "0",
+				"ifnum" => "{$ph1ent['ikeid']}000"
+			);
+		}
+	}
+}
+
+function upgrade_209_to_210() {
+	global $config;
+	if (isset($config['system']['dnslocalhost'])) {
+		$config['system']['dnslocalhost'] = 'remote';
+	}
+}
+
+/* OpenVPN Data Cipher changes
+ * https://redmine.pfsense.org/issues/10919 */
+function upgrade_210_to_211() {
+	global $config;
+	init_config_arr(array('openvpn', 'openvpn-server'));
+	init_config_arr(array('openvpn', 'openvpn-client'));
+	foreach(array('server', 'client') as $mode) {
+		foreach ($config['openvpn']["openvpn-{$mode}"] as & $settings) {
+			/* Rename ncp-ciphers to data_ciphers */
+			if (!empty($settings['ncp-ciphers'])) {
+				$settings['data_ciphers'] = $settings['ncp-ciphers'];
+			} elseif ($settings['crypto'] == 'none') {
+				$settings['data_ciphers'] = 'none';
+			} else {
+				$settings['data_ciphers'] = 'AES-256-GCM,AES-128-GCM,CHACHA20-POLY1305';
+			}
+			if (isset($settings['ncp-ciphers'])) {
+				unset($settings['ncp-ciphers']);
+			}
+			/* Add crypto to data_ciphers */
+			if (!empty($settings['crypto']) &&
+			    ($settings['crypto'] != 'none') &&
+			    !in_array($settings['crypto'], explode(',', $settings['data_ciphers']))) {
+				$settings['data_ciphers'] .= ',' . $settings['crypto'];
+			}
+			/* Rename crypto to data_ciphers_fallback */
+			if (isset($settings['crypto'])) {
+				$settings['data_ciphers_fallback'] = $settings['crypto'];
+				unset($settings['crypto']);
+			}
+			/* Forcefully enable data cipher negotiation since
+			 * disabling negotiation is now deprecated */
+			$settings['ncp_enable'] = "enabled";
+		}
+	}
+}
+
+function upgrade_211_to_212() {
+	global $config;
+	if (isset($config['unbound']['sslport'])) {
+		$config['unbound']['tlsport'] = $config['unbound']['sslport'];
+		unset($config['unbound']['sslport']);
+	}
 }
 
 /*

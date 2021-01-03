@@ -184,6 +184,18 @@ if ($_POST['save']) {
 		$input_errors[] = gettext("At least one member interface must be selected for a bridge.");
 	}
 
+	if (is_array($_POST['members']) && is_array($config['captiveportal'])) {
+		foreach ($_POST['members'] as $member) {
+			foreach ($config['captiveportal'] as $cp) {
+				if (in_array($member, explode(',', $cp['interface']))) {
+					$input_errors[] = sprintf(gettext('The interface (%s) is part of ' .
+						'the Captive Portal and cannot be part of the bridge. ' .
+						'Remove the interface to continue.'), $ifacelist[$cpint]);
+				}
+			}
+		}
+	}
+
 	if (is_array($_POST['static'])) {
 		foreach ($_POST['static'] as $ifstatic) {
 			if (is_array($_POST['members']) && !in_array($ifstatic, $_POST['members'])) {
@@ -204,6 +216,10 @@ if ($_POST['save']) {
 		foreach ($_POST['stp'] as $ifstp) {
 			if (is_array($_POST['members']) && !in_array($ifstp, $_POST['members'])) {
 				$input_errors[] = sprintf(gettext('STP interface (%s) is not part of the bridge. Remove the STP interface to continue.'), $ifacelist[$ifstp]);
+			}
+			$realif = get_real_interface($ifstp);
+			if (is_pseudo_interface($realif) || interface_is_vlan($realif)) {
+				$input_errors[] = sprintf(gettext('STP interface (%s) must not be a pseudo-interface or a VLAN interface.'), $ifacelist[$ifstp]);
 			}
 		}
 		$pconfig['stp'] = implode(',', $_POST['stp']);
@@ -287,6 +303,7 @@ if ($_POST['save']) {
 		$bridge['proto'] = $_POST['proto'];
 		$bridge['holdcnt'] = $_POST['holdcnt'];
 		$i = 0;
+		$j = 0;
 		$ifpriority = "";
 		$ifpathcost = "";
 
@@ -300,14 +317,15 @@ if ($_POST['save']) {
 					$ifpriority .= ",";
 				}
 				$ifpriority .= $ifn.":".$_POST[$ifn];
+				$i++;
 			}
 			if ($_POST["{$ifn}0"] <> "") {
-				if ($i > 0) {
+				if ($j > 0) {
 					$ifpathcost .= ",";
 				}
 				$ifpathcost .= $ifn.":".$_POST["{$ifn}0"];
+				$j++;
 			}
-			$i++;
 		}
 
 		$bridge['ifpriority'] = $ifpriority;
@@ -351,7 +369,7 @@ if ($_POST['save']) {
 				$a_bridges[] = $bridge;
 			}
 
-			write_config();
+			write_config("Bridge interface created");
 
 			$confif = convert_real_interface_to_friendly_interface_name($bridge['bridgeif']);
 			if ($confif <> "") {

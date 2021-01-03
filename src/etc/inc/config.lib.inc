@@ -152,7 +152,7 @@ function parse_config($parse = false) {
 	$config_parsed = true;
 	unlock($lockkey);
 
-	alias_make_table($config);
+	alias_make_table();
 
 	return $config;
 }
@@ -202,13 +202,115 @@ function restore_backup($file) {
 	global $g;
 
 	if (file_exists($file)) {
+		/* restore rrddata/xmldata and clear appropriate data,
+		 * see https://redmine.pfsense.org/issues/11050 */
+		$data = file_get_contents("$file");
+		$conf = parse_xml_config("$file", $g['xml_rootobj']);
+		if ($conf['rrddata']) {
+			restore_rrddata($conf);
+			$data = clear_tagdata("rrd", $data);
+		}
+		foreach ($g['backuppath'] as $bk => $path) {
+			if (!empty($conf[$bk][$bk.'data'])) {
+				restore_xmldatafile($bk, $conf);
+				$data = clear_tagdata($bk, $data);
+			}
+		}
+		file_put_contents($file, $data);
 		unlink_if_exists("{$g['tmp_path']}/config.cache");
 		copy("$file", "/cf/conf/config.xml");
 		//pfSense_fsync("/cf/conf/config.xml");
 		//pfSense_fsync($g['conf_path']);
 		disable_security_checks();
-		log_error(sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_name'], $file));
-		file_notice("config.xml", sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_name'], $file), "pfSenseConfigurator", "");
+		log_error(sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_label'], $file));
+		file_notice("config.xml", sprintf(gettext('%1$s is restoring the configuration %2$s'), $g['product_label'], $file), "pfSenseConfigurator", "");
+	}
+}
+
+/*
+ *	Backup RRD/XML Data
+ */
+
+/* If the config on disk had rrddata/xmldata tags already, remove that section first.
+ * See https://redmine.pfsense.org/issues/8994,
+ *     https://redmine.pfsense.org/issues/10508, 
+ *     https://redmine.pfsense.org/issues/11050 */
+function clear_tagdata($tag = "rrd", $data) {
+	$data = preg_replace("/[[:blank:]]*<{$tag}data>.*<\\/{$tag}data>[[:blank:]]*\n*/s", "", $data);
+	$data = preg_replace("/[[:blank:]]*<{$tag}data\\/>[[:blank:]]*\n*/", "", $data);
+
+	return $data;
+}
+
+function restore_xmldatafile($type='voucher', $conf = false) {
+	global $config, $g;
+
+	if (!$conf) {
+		$conf = & $config;
+	}
+
+	foreach ($conf[$type]["{$type}data"]["xmldatafile"] as $file) {
+		$basename = basename($file['filename']);
+		$dirname = dirname($g['backuppath'][$type]);
+		$xmldata_file = "{$dirname}/{$basename}";
+		if (file_put_contents($xmldata_file, gzinflate(base64_decode($file['data']))) === false) {
+			log_error(sprintf(gettext("Cannot write %s"), $xmldata_file));
+			continue;
+		}
+	}
+}
+
+function restore_rrddata($conf = false) {
+	global $config, $g, $rrdtool, $input_errors;
+
+	if (!$conf) {
+		$conf = & $config;
+	}
+
+	foreach ($conf['rrddata']['rrddatafile'] as $rrd) {
+		if ($rrd['xmldata']) {
+			$rrd_file = "{$g['vardb_path']}/rrd/{$rrd['filename']}";
+			$xml_file = preg_replace('/\.rrd$/', ".xml", $rrd_file);
+			if (file_put_contents($xml_file, gzinflate(base64_decode($rrd['xmldata']))) === false) {
+				log_error(sprintf(gettext("Cannot write %s"), $xml_file));
+				continue;
+			}
+			$output = array();
+			$status = null;
+			exec("$rrdtool restore -f '{$xml_file}' '{$rrd_file}'", $output, $status);
+			if ($status) {
+				log_error("rrdtool restore -f '{$xml_file}' '{$rrd_file}' failed returning {$status}.");
+				continue;
+			}
+			unlink($xml_file);
+		} else if ($rrd['data']) {
+			$rrd_file = "{$g['vardb_path']}/rrd/{$rrd['filename']}";
+			$rrd_fd = fopen($rrd_file, "w");
+			if (!$rrd_fd) {
+				log_error(sprintf(gettext("Cannot write %s"), $rrd_file));
+				continue;
+			}
+			$data = base64_decode($rrd['data']);
+			/* Try to decompress the data. */
+			$dcomp = @gzinflate($data);
+			if ($dcomp) {
+				/* If the decompression worked, write the decompressed data */
+				if (fwrite($rrd_fd, $dcomp) === false) {
+					log_error(sprintf(gettext("fwrite %s failed"), $rrd_file));
+					continue;
+				}
+			} else {
+				/* If the decompression failed, it wasn't compressed, so write raw data */
+				if (fwrite($rrd_fd, $data) === false) {
+					log_error(sprintf(gettext("fwrite %s failed"), $rrd_file));
+					continue;
+				}
+			}
+			if (fclose($rrd_fd) === false) {
+				log_error(sprintf(gettext("fclose %s failed"), $rrd_file));
+				continue;
+			}
+		}
 	}
 }
 
@@ -235,7 +337,7 @@ function parse_config_bootup() {
 				restore_backup("/cf/conf/backup/{$last_backup}");
 			}
 			if (!file_exists("{$g['conf_path']}/config.xml")) {
-				echo sprintf(gettext("XML configuration file not found.  %s cannot continue booting."), $g['product_name']) . "\n";
+				echo sprintf(gettext("XML configuration file not found.  %s cannot continue booting."), $g['product_label']) . "\n";
 				unlock($lockkey);
 				die(gettext("Could not find a usable configuration file or it's backup! Exiting...."));
 			} else {
@@ -270,9 +372,9 @@ function parse_config_bootup() {
 
 *******************************************************************************
 * WARNING!                                                                    *
-* The current configuration has been created with a newer version of {$g['product_name']}  *
+* The current configuration has been created with a newer version of {$g['product_label']}  *
 * than this one! This can lead to serious misbehavior and even security       *
-* holes! You are urged to either upgrade to a newer version of {$g['product_name']} or     *
+* holes! You are urged to either upgrade to a newer version of {$g['product_label']} or     *
 * revert to the default configuration immediately!                            *
 *******************************************************************************
 
@@ -281,7 +383,7 @@ EOD;
 		}
 
 	/* make alias table (for faster lookups) */
-	alias_make_table($config);
+	alias_make_table();
 }
 
 /****f* config/conf_mount_rw
@@ -521,6 +623,10 @@ function write_config($desc="Unknown", $backup = true, $write_config_only = fals
 		backup_config();
 	}
 
+	if ($desc == "Unknown") {
+		file_notice("config.xml", gettext(
+		    'WARNING: write_config() was called without description'));
+	}
 	$config['revision'] = make_config_revision_entry($desc);
 
 	$lockkey = lock('config', LOCK_EX);
@@ -910,6 +1016,26 @@ function backup_config() {
 
 
 	return true;
+}
+
+function backup_info($backup_info, $number) {
+	if ($backup_info['time'] != 0) {
+		$date = date(gettext("n/j/y H:i:s"), $backup_info['time']);
+	} else {
+		$date = gettext("Unknown");
+	}
+
+	list($page, $reason) = explode(": ", $backup_info['description'], 2);
+	if (empty($reason)) {
+		$reason = $page;
+		$page = gettext("Unknown Page");
+	}
+
+	$backup_info = sprintf("%02d", $number) . ". {$date}\tv{$backup_info['version']}\t{$page}\n";
+	if ($reason) {
+		$backup_info .= "    {$reason}\n";
+	}
+	return $backup_info;
 }
 
 function set_device_perms() {

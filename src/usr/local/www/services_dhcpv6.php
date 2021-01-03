@@ -37,6 +37,8 @@ require_once("guiconfig.inc");
 require_once("filter.inc");
 
 function dhcpv6_apply_changes($dhcpdv6_enable_changed) {
+	global $config, $g;
+
 	$retval = 0;
 	$retvaldhcp = 0;
 	$retvaldns = 0;
@@ -324,8 +326,8 @@ if (isset($_POST['apply'])) {
 		if (!$_POST['ddnsdomainkeyname'] || !$_POST['ddnsdomainkeyalgorithm'] || !$_POST['ddnsdomainkey']) {
 			$input_errors[] = gettext("A valid domain key name, algorithm and secret must be specified.");
 		}
-		if (preg_match('/[^A-Za-z0-9\-_]/', $_POST['ddnsdomainkeyname'])) {
-			$input_errors[] = gettext("The domain key name may only contain the characters a-z, A-Z, 0-9, '-' and '_'");
+		if (preg_match('/[^A-Za-z0-9\.\-\_]/', $_POST['ddnsdomainkeyname'])) {
+			$input_errors[] = gettext("The domain key name may only contain the characters a-z, A-Z, 0-9, '-', '_' and '.'");
 		}
 		if ($_POST['ddnsdomainkey'] && !base64_decode($_POST['ddnsdomainkey'], true)) {
 			$input_errors[] = gettext("The domain key secret must be a Base64 encoded value.");
@@ -495,7 +497,7 @@ if (isset($_POST['apply'])) {
 
 		$config['dhcpdv6'][$if]['numberoptions'] = $numberoptions;
 
-		write_config();
+		write_config("DHCPv6 server settings saved");
 
 		$changes_applied = true;
 		$retval = dhcpv6_apply_changes($dhcpdv6_enable_changed);
@@ -505,7 +507,7 @@ if (isset($_POST['apply'])) {
 if ($_POST['act'] == "del") {
 	if ($a_maps[$_POST['id']]) {
 		unset($a_maps[$_POST['id']]);
-		write_config();
+		write_config("DHCPv6 server static map deleted");
 		if (isset($config['dhcpdv6'][$if]['enable'])) {
 			mark_subsystem_dirty('staticmapsv6');
 			if (isset($config['dnsmasq']['enable']) && isset($config['dnsmasq']['regdhcpstaticv6'])) {
@@ -554,7 +556,8 @@ foreach ($iflist as $ifent => $ifname) {
 	    !is_linklocal($oc['ipaddrv6'])));
 
 	if ((!is_array($config['dhcpdv6'][$ifent]) ||
-	    !isset($config['dhcpdv6'][$ifent]['enable'])) &&
+	    !isset($config['dhcpdv6'][$ifent]['enable']) ||
+	    preg_match('/poes/', $ifent)) &&
 	    !$valid_if_ipaddrv6) {
 		continue;
 	}
@@ -626,6 +629,11 @@ if (is_ipaddrv6($ifcfgip)) {
 
 	if ($ifcfgip == "::") {
 		$sntext = "Prefix Delegation";
+		if (get_interface_track6ip($if)) {
+			$track6ip = get_interface_track6ip($if);
+			$pdsubnet = gen_subnetv6($track6ip[0], $track6ip[1]);
+			$sntext .= " ({$pdsubnet}/{$track6ip[1]})";
+		}
 	} else {
 		$sntext = gen_subnetv6($ifcfgip, $ifcfgsn);
 	}

@@ -37,7 +37,6 @@ require_once("guiconfig.inc");
 require_once("functions.inc");
 require_once("filter.inc");
 require_once("shaper.inc");
-require_once("pfsense-utils.inc");
 
 $pconfig['disablefilter'] = $config['system']['disablefilter'];
 $pconfig['scrubnodf'] = $config['system']['scrubnodf'];
@@ -396,18 +395,11 @@ if ($_POST) {
 			killbypid("{$g['varrun_path']}/filterdns.pid");
 		}
 
-		/* Update loader.conf when necessary */
+		/* Update net.pf.request_maxcount when necessary
+		 * See https://redmine.pfsense.org/issues/10861 */
 		if ($old_maximumtableentries !=
 		    $config['system']['maximumtableentries']) {
-			setup_loader_settings();
-			$cur_maximumtableentries = get_single_sysctl(
-			    'net.pf.request_maxcount');
-
-
-			if ($config['system']['maximumtableentries'] >
-			    $cur_maximumtableentries) {
-				$show_reboot_msg = true;
-			}
+			system_setup_sysctl();
 		}
 
 		$changes_applied = true;
@@ -481,7 +473,7 @@ $section->addInput(new Form_Checkbox(
 	isset($config['system']['disablefilter'])
 ))->setHelp('Note: This converts %1$s into a routing only platform!%2$s'.
 	'Note: This will also turn off NAT! To only disable NAT, '.
-	'and not firewall rules, visit the %3$sOutbound NAT%4$s page.', $g["product_name"], '<br/>', '<a href="firewall_nat_out.php">', '</a>');
+	'and not firewall rules, visit the %3$sOutbound NAT%4$s page.', $g["product_label"], '<br/>', '<a href="firewall_nat_out.php">', '</a>');
 
 $section->addInput(new Form_Checkbox(
 	'disablescrub',

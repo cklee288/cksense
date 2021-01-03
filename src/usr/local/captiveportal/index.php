@@ -82,7 +82,12 @@ if ((!empty($cpsession)) && (! $_POST['logout_id']) && (!empty($cpcfg['page']['l
 } elseif (!empty($cpsession) && (!isset($_POST['logout_id']) || !isset($config['captiveportal'][$cpzone]['logoutwin_enable']))) {
 	/* If client try to access captive portal page while already connected, 
 		but no custom logout page does exist and logout popup is disabled */	
-	echo gettext("You are connected.");
+	echo gettext("You are connected.<br/>");
+	if ($_GET['redirurl'] || $_POST['redirurl']) {
+		$redirurl = $_GET['redirurl'] ? $_GET['redirurl'] : $_POST['redirurl'];
+		$redirurl = htmlspecialchars($redirurl);
+		echo ("You can proceed to: <a href='{$redirurl}'>{$redirurl}</a>");
+	} 
 	ob_flush();
 	return;
 } elseif ($orig_host != $ourhostname) {
@@ -157,8 +162,15 @@ EOD;
 	captiveportal_logportalauth("unauthenticated", $clientmac, $clientip, "ACCEPT");
 	portal_allow($clientip, $clientmac, "unauthenticated", null, $redirurl);
 
-} elseif (isset($config['voucher'][$cpzone]['enable']) && $_POST['accept'] && $_POST['auth_voucher']) {
-	$voucher = trim($_POST['auth_voucher']);
+} elseif (isset($config['voucher'][$cpzone]['enable']) && ($_POST['accept'] && $_POST['auth_voucher']) || $_GET['voucher']) {
+	if (isset($_POST['auth_voucher'])) {
+		$voucher = trim($_POST['auth_voucher']);
+	} else {
+		/* submit voucher via URL, see https://redmine.pfsense.org/issues/1984 */
+		$voucher = trim($_GET['voucher']);
+		portal_reply_page($redirurl, "login", null, $clientmac, $clientip, null, null, $voucher);
+		return;
+	}
 	$errormsg = gettext("Invalid credentials specified.");
 	$timecredit = voucher_auth($voucher);
 	// $timecredit contains either a credit in minutes or an error message
@@ -170,7 +182,9 @@ EOD;
 			'voucher' => 1,
 			'session_timeout' => $timecredit*60,
 			'session_terminate_time' => 0);
-		if (portal_allow($clientip, $clientmac, $voucher, null, $redirurl, $attr, null, 'voucher', 'voucher')) {
+		if (portal_allow($clientip, $clientmac, $voucher, null, $redirurl, $attr, null, 'voucher', 'voucher') === 2) {
+			portal_reply_page($redirurl, "error", "Reuse of identification not allowed.");
+		} elseif (portal_allow($clientip, $clientmac, $voucher, null, $redirurl, $attr, null, 'voucher', 'voucher')) {
 			// YES: user is good for $timecredit minutes.
 			captiveportal_logportalauth($voucher, $clientmac, $clientip, "Voucher login good for $timecredit min.");
 		} else {

@@ -123,7 +123,9 @@ $ramode_help = gettext('Select the Operating Mode for the Router Advertisement (
 	'<dt>' . gettext('Assisted') . 		 '</dt><dd>' . gettext('Will advertise this router with configuration through a DHCPv6 server and/or stateless autoconfig.') . '</dd>' .
 	'<dt>' . gettext('Stateless DHCP') . '</dt><dd>' . gettext('Will advertise this router with stateless autoconfig and other configuration information available via DHCPv6.') . '</dd>' .
 	'</dl>' .
-	gettext('It is not required to activate DHCPv6 server on pfSense when set to "Managed", "Assisted" or "Stateless DHCP", it can be another host on the network.') .
+	sprintf(gettext('It is not required to activate DHCPv6 server on %s ' .
+	    'when set to "Managed", "Assisted" or "Stateless DHCP", it can ' .
+	    'be another host on the network.'), $g['product_label']) .
 	'</div>';
 
 if ($_POST['save']) {
@@ -196,6 +198,13 @@ if ($_POST['save']) {
 	if ($_POST['raadvdefaultlifetime'] && (($_POST['raadvdefaultlifetime'] < 1) || ($_POST['raadvdefaultlifetime'] > 9000))) {
 		$input_errors[] = gettext("Router lifetime must be an integer between 1 and 9000.");
 	}
+	if (($_POST['ravalidlifetime'] && $_POST['rapreferredlifetime'] &&
+	    ($_POST['ravalidlifetime'] < $_POST['rapreferredlifetime'])) ||
+	    ($_POST['ravalidlifetime'] && empty($_POST['rapreffedlifetime']) &&
+	    ($_POST['ravalidlifetime'] < 14400)) || (empty($_POST['ravalidlifetime']) &&
+	    $_POST['rapreferredlifetime'] && ($_POST['rapreferredlifetime'] > 86400))) { 
+		$input_errors[] = gettext("Default valid lifetime must be greater than Default preferred lifetime.");
+	}
 
 	if (!$input_errors) {
 		if (!is_array($config['dhcpdv6'])) {
@@ -237,7 +246,7 @@ if ($_POST['save']) {
 			unset($config['dhcpdv6'][$if]['subnets']);
 		}
 
-		write_config();
+		write_config("Router Advertisements settings saved");
 		$changes_applied = true;
 		$retval = 0;
 		$retval |= services_radvd_configure();
@@ -463,7 +472,7 @@ $section->addInput(new Form_Checkbox(
 	'radvd-dns',
 	null,
 	'Provide DNS configuration via radvd',
-	($pconfig['radvd-dns'] == "enabled")
+	$pconfig['radvd-dns']
 ))->setHelp('Unchecking this box disables the RDNSS/DNSSL options in /var/etc/radvd.conf. ' .
 			'Use with caution, as the resulting behavior may violate some RFCs.');
 

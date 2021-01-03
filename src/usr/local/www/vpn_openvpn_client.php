@@ -87,7 +87,8 @@ if ($_POST['act'] == "del") {
 
 if ($act == "new") {
 	$pconfig['ncp_enable'] = "enabled";
-	$pconfig['ncp-ciphers'] = "AES-128-GCM";
+	$pconfig['data_ciphers'] = 'AES-256-GCM,AES-128-GCM,CHACHA20-POLY1305';
+	$pconfig['data_ciphers_fallback'] = 'AES-256-CBC';
 	$pconfig['autokey_enable'] = "yes";
 	$pconfig['tlsauth_enable'] = "yes";
 	$pconfig['tlsauth_keydir'] = "default";
@@ -96,11 +97,12 @@ if ($act == "new") {
 	$pconfig['server_port'] = 1194;
 	$pconfig['verbosity_level'] = 1; // Default verbosity is 1
 	$pconfig['digest'] = "SHA256";
-	$pconfig['compression'] = "none";
+	$pconfig['allow_compression'] = "no";
+	$pconfig['compression'] = "";
 }
 
 global $simplefields;
-$simplefields = array('auth_user', 'auth_pass');
+$simplefields = array('auth_user', 'auth_pass', 'proxy_user', 'proxy_passwd');
 
 if (($act == "edit") || ($act == "dup")) {
 	if (isset($id) && $a_client[$id]) {
@@ -120,16 +122,14 @@ if (($act == "edit") || ($act == "dup")) {
 		$pconfig['server_port'] = $a_client[$id]['server_port'];
 		$pconfig['proxy_addr'] = $a_client[$id]['proxy_addr'];
 		$pconfig['proxy_port'] = $a_client[$id]['proxy_port'];
-		$pconfig['proxy_user'] = $a_client[$id]['proxy_user'];
-		$pconfig['proxy_passwd'] = $a_client[$id]['proxy_passwd'];
 		$pconfig['proxy_authtype'] = $a_client[$id]['proxy_authtype'];
 		$pconfig['description'] = $a_client[$id]['description'];
 		$pconfig['custom_options'] = $a_client[$id]['custom_options'];
 		$pconfig['ns_cert_type'] = $a_client[$id]['ns_cert_type'];
-		if (isset($a_client[$id]['ncp-ciphers'])) {
-			$pconfig['ncp-ciphers'] = $a_client[$id]['ncp-ciphers'];
+		if (isset($a_client[$id]['data_ciphers'])) {
+			$pconfig['data_ciphers'] = $a_client[$id]['data_ciphers'];
 		} else {
-			$pconfig['ncp-ciphers'] = "AES-128-GCM";
+			$pconfig['data_ciphers'] = 'AES-256-GCM,AES-128-GCM,CHACHA20-POLY1305';
 		}
 		if (isset($a_client[$id]['ncp_enable'])) {
 			$pconfig['ncp_enable'] = $a_client[$id]['ncp_enable'];
@@ -151,7 +151,7 @@ if (($act == "edit") || ($act == "dup")) {
 			$pconfig['shared_key'] = base64_decode($a_client[$id]['shared_key']);
 		}
 		$pconfig['tlsauth_keydir'] = $a_client[$id]['tlsauth_keydir'];
-		$pconfig['crypto'] = $a_client[$id]['crypto'];
+		$pconfig['data_ciphers_fallback'] = $a_client[$id]['data_ciphers_fallback'];
 		$pconfig['digest'] = !empty($a_client[$id]['digest']) ? $a_client[$id]['digest'] : "SHA256";
 		$pconfig['engine'] = $a_client[$id]['engine'];
 
@@ -160,6 +160,7 @@ if (($act == "edit") || ($act == "dup")) {
 		$pconfig['remote_network'] = $a_client[$id]['remote_network'];
 		$pconfig['remote_networkv6'] = $a_client[$id]['remote_networkv6'];
 		$pconfig['use_shaper'] = $a_client[$id]['use_shaper'];
+		$pconfig['allow_compression'] = $a_client[$id]['allow_compression'];
 		$pconfig['compression'] = $a_client[$id]['compression'];
 		$pconfig['auth-retry-none'] = $a_client[$id]['auth-retry-none'];
 		$pconfig['passtos'] = $a_client[$id]['passtos'];
@@ -198,6 +199,7 @@ if (($act == "edit") || ($act == "dup")) {
 if ($act == "dup") {
 	$act = "new";
 	$vpnid = 0;
+	$parentid = $id;
 	unset($id);
 }
 
@@ -222,8 +224,8 @@ if ($_POST['save']) {
 	}
 
 	$cipher_validation_list = array_keys(openvpn_get_cipherlist());
-	if (!in_array($pconfig['crypto'], $cipher_validation_list)) {
-		$input_errors[] = gettext("The selected Encryption Algorithm is not valid.");
+	if (!in_array($pconfig['data_ciphers_fallback'], $cipher_validation_list)) {
+		$input_errors[] = gettext("The selected Fallback Data Encryption Algorithm is not valid.");
 	}
 
 	list($iv_iface, $iv_ip) = explode ("|", $pconfig['interface']);
@@ -290,10 +292,6 @@ if ($_POST['save']) {
 			if (empty($pconfig['proxy_user']) || empty($pconfig['proxy_passwd'])) {
 				$input_errors[] = gettext("User name and password are required for proxy with authentication.");
 			}
-
-			if ($pconfig['proxy_passwd'] != $pconfig['proxy_passwd_confirm']) {
-				$input_errors[] = gettext("Proxy password and confirmation must match.");
-			}
 		}
 	}
 
@@ -352,16 +350,16 @@ if ($_POST['save']) {
 		}
 	}
 
-	if (($pconfig['mode'] == "p2p_shared_key") && strstr($pconfig['crypto'], "GCM")) {
+	if (($pconfig['mode'] == "p2p_shared_key") && strstr($pconfig['data_ciphers_fallback'], "GCM")) {
 		$input_errors[] = gettext("GCM Encryption Algorithms cannot be used with Shared Key mode.");
 	}
 
 	/* If we are not in shared key mode, then we need the CA/Cert. */
 	if ($pconfig['mode'] != "p2p_shared_key") {
-		if (($pconfig['ncp_enable'] != "disabled") && !empty($pconfig['ncp-ciphers']) && is_array($pconfig['ncp-ciphers'])) {
-			foreach ($pconfig['ncp-ciphers'] as $ncpc) {
-				if (!in_array(trim($ncpc), $cipher_validation_list)) {
-					$input_errors[] = gettext("One or more of the selected NCP Algorithms is not valid.");
+		if (($pconfig['ncp_enable'] != "disabled") && !empty($pconfig['data_ciphers']) && is_array($pconfig['data_ciphers'])) {
+			foreach ($pconfig['data_ciphers'] as $dc) {
+				if (!in_array(trim($dc), $cipher_validation_list)) {
+					$input_errors[] = gettext("One or more of the selected Data Encryption Algorithms is not valid.");
 				}
 			}
 		}
@@ -378,10 +376,6 @@ if ($_POST['save']) {
 	if ($pconfig['mode'] != "p2p_shared_key") {
 		if (empty($pconfig['certref']) && empty($pconfig['auth_user']) && empty($pconfig['auth_pass'])) {
 			$input_errors[] = gettext("If no Client Certificate is selected, a username and/or password must be entered.");
-		}
-
-		if ($pconfig['auth_pass'] != $pconfig['auth_pass_confirm']) {
-			$input_errors[] = gettext("Password and confirmation must match.");
 		}
 	}
 
@@ -451,8 +445,13 @@ if ($_POST['save']) {
 		}
 
 		foreach ($simplefields as $stat) {
-			if (($stat == 'auth_pass') && ($_POST[$stat] == DMYPWD)) {
-				$client[$stat] = $a_client[$id]['auth_pass'];
+			if ($_POST[$stat] == DMYPWD) {
+				if (is_numeric($_POST['parentid'])) {
+					$orig_id = $_POST['parentid'];
+				} else {
+					$orig_id = $id;
+				}
+				$client[$stat] = $a_client[$orig_id][$stat];
 			} else {
 				update_if_changed($stat, $client[$stat], $_POST[$stat]);
 			}
@@ -476,10 +475,6 @@ if ($_POST['save']) {
 		$client['proxy_addr'] = $pconfig['proxy_addr'];
 		$client['proxy_port'] = $pconfig['proxy_port'];
 		$client['proxy_authtype'] = $pconfig['proxy_authtype'];
-		$client['proxy_user'] = $pconfig['proxy_user'];
-		if ($pconfig['proxy_passwd'] != DMYPWD) {
-			$client['proxy_passwd'] = $pconfig['proxy_passwd'];
-		}
 		$client['description'] = $pconfig['description'];
 		$client['mode'] = $pconfig['mode'];
 		$client['topology'] = $pconfig['topology'];
@@ -500,7 +495,7 @@ if ($_POST['save']) {
 		} else {
 			$client['shared_key'] = base64_encode($pconfig['shared_key']);
 		}
-		$client['crypto'] = $pconfig['crypto'];
+		$client['data_ciphers_fallback'] = $pconfig['data_ciphers_fallback'];
 		$client['digest'] = $pconfig['digest'];
 		$client['engine'] = $pconfig['engine'];
 
@@ -509,6 +504,7 @@ if ($_POST['save']) {
 		$client['remote_network'] = $pconfig['remote_network'];
 		$client['remote_networkv6'] = $pconfig['remote_networkv6'];
 		$client['use_shaper'] = $pconfig['use_shaper'];
+		$client['allow_compression'] = $pconfig['allow_compression'];
 		$client['compression'] = $pconfig['compression'];
 		$client['auth-retry-none'] = $pconfig['auth-retry-none'];
 		$client['passtos'] = $pconfig['passtos'];
@@ -521,8 +517,8 @@ if ($_POST['save']) {
 		$client['verbosity_level'] = $pconfig['verbosity_level'];
 		$client['create_gw'] = $pconfig['create_gw'];
 
-		if (!empty($pconfig['ncp-ciphers'])) {
-			$client['ncp-ciphers'] = implode(",", $pconfig['ncp-ciphers']);
+		if (!empty($pconfig['data_ciphers'])) {
+			$client['data_ciphers'] = implode(",", $pconfig['data_ciphers']);
 		}
 
 		$client['ncp_enable'] = $pconfig['ncp_enable'] ? "enabled":"disabled";
@@ -550,8 +546,8 @@ if ($_POST['save']) {
 		exit;
 	}
 
-	if (!empty($pconfig['ncp-ciphers'])) {
-		$pconfig['ncp-ciphers'] = implode(",", $pconfig['ncp-ciphers']);
+	if (!empty($pconfig['data_ciphers'])) {
+		$pconfig['data_ciphers'] = implode(",", $pconfig['data_ciphers']);
 	}
 }
 
@@ -683,8 +679,8 @@ if ($act=="new" || $act=="edit"):
 		'proxy_passwd',
 		'Password',
 		'password',
-		$pconfig['proxy_passwd']
-	));
+		$pconfig['proxy_passwd'],
+	), false);
 
 	$section->addInput(new Form_Input(
 		'description',
@@ -710,14 +706,18 @@ if ($act=="new" || $act=="edit"):
 		'Password',
 		'password',
 		$pconfig['auth_pass']
-	))->setHelp('Leave empty when no password is needed');
+	), false)->setHelp('Leave empty when no password is needed');
 
 	$section->addInput(new Form_Checkbox(
 		'auth-retry-none',
 		'Authentication Retry',
 		'Do not retry connection when authentication fails',
 		$pconfig['auth-retry-none']
-	))->setHelp('When enabled, the OpenVPN process will exit if it receives an authentication failure message. The default behavior is to retry.');
+	))->setHelp('When enabled, the OpenVPN process will exit if it receives an authentication failure message. ' .
+		    'The default behavior is to retry.%1$s%2$s%3$s', '<div class="infoblock">',
+		    sprint_info_box(gettext('WARNING: If the remote server requires both a username and a password, ' .
+		    'but only one is filled in, the system will hang on reboot prompting for OpenVPN Client credentials unless ' .
+		    'Authentication Retry is checked.'), 'info', false), '</div>');
 
 	$form->add($section);
 
@@ -818,30 +818,19 @@ if ($act=="new" || $act=="edit"):
 		$cl['server']
 		));
 
-	$section->addInput(new Form_Select(
-		'crypto',
-		'*Encryption Algorithm',
-		$pconfig['crypto'],
-		openvpn_get_cipherlist()
-		))->setHelp('The Encryption Algorithm used for data channel packets when Negotiable Cryptographic Parameter (NCP) support is not available.');
-
 	$section->addInput(new Form_Checkbox(
 		'ncp_enable',
-		'Enable NCP',
-		'Enable Negotiable Cryptographic Parameters',
+		'Data Encryption Negotiation',
+		'Enable Data Encryption Negotiation',
 		($pconfig['ncp_enable'] == "enabled")
-	))->setHelp('Check this option to allow OpenVPN clients and servers to negotiate a compatible set of acceptable cryptographic ' .
-				'Encryption Algorithms from those selected in the NCP Algorithms list below.' .
-				'%1$s%2$s%3$s',
-				'<div class="infoblock">',
-				sprint_info_box(gettext('When both peers support NCP and have it enabled, NCP overrides the Encryption Algorithm above.') . '<br />' .
-					gettext('When disabled, only the selected Encryption Algorithm is allowed.'), 'info', false),
-				'</div>');
+	))->setHelp('This option allows OpenVPN clients and servers to negotiate a compatible set of acceptable cryptographic ' .
+			'data encryption algorithms from those selected in the Data Encryption Algorithms list below. ' .
+			'Disabling this feature is deprecated.');
 
-	foreach (explode(",", $pconfig['ncp-ciphers']) as $cipher) {
-		$ncp_ciphers_list[$cipher] = $cipher;
+	foreach (explode(",", $pconfig['data_ciphers']) as $cipher) {
+		$data_ciphers_list[$cipher] = $cipher;
 	}
-	$group = new Form_Group('NCP Algorithms');
+	$group = new Form_Group('Data Encryption Algorithms');
 
 	$group->add(new Form_Select(
 		'availciphers',
@@ -850,26 +839,35 @@ if ($act=="new" || $act=="edit"):
 		openvpn_get_cipherlist(),
 		true
 	))->setAttribute('size', '10')
-	  ->setHelp('Available NCP Encryption Algorithms%1$sClick to add or remove an algorithm from the list', '<br />');
+	  ->setHelp('Available Data Encryption Algorithms%1$sClick to add or remove an algorithm from the list', '<br />');
 
 	$group->add(new Form_Select(
-		'ncp-ciphers',
+		'data_ciphers',
 		null,
 		array(),
-		$ncp_ciphers_list,
+		$data_ciphers_list,
 		true
 	))->setReadonly()
 	  ->setAttribute('size', '10')
-	  ->setHelp('Allowed NCP Encryption Algorithms. Click an algorithm name to remove it from the list');
+	  ->setHelp('Allowed Data Encryption Algorithms. Click an algorithm name to remove it from the list');
 
-	$group->setHelp('The order of the selected NCP Encryption Algorithms is respected by OpenVPN.' .
-					'%1$s%2$s%3$s',
+	$group->setHelp('The order of the selected Data Encryption Algorithms is respected by OpenVPN.%1$s%2$s%3$s',
 					'<div class="infoblock">',
-					sprint_info_box(gettext('For backward compatibility, when an older peer connects that does not support NCP, OpenVPN will use the Encryption Algorithm ' .
-						'requested by the peer so long as it is selected in this list or chosen as the Encryption Algorithm.'), 'info', false),
+					sprint_info_box(
+						gettext('For backward compatibility, when an older peer connects that does not support dynamic negotiation, OpenVPN will use the Fallback Data Encryption Algorithm ' .
+							'requested by the peer so long as it is selected in this list or chosen as the Fallback Data Encryption Algorithm.'), 'info', false),
 					'</div>');
 
 	$section->add($group);
+
+	$section->addInput(new Form_Select(
+		'data_ciphers_fallback',
+		'Fallback Data Encryption Algorithm',
+		$pconfig['data_ciphers_fallback'],
+		openvpn_get_cipherlist()
+		))->setHelp('The Fallback Data Encryption Algorithm used for data channel packets when communicating with ' .
+				'clients that do not support data encryption algorithm negotiation. ' .
+				'This algorithm is automatically included in the Data Encryption Algorithms list.');
 
 	$section->addInput(new Form_Select(
 		'digest',
@@ -938,15 +936,25 @@ if ($act=="new" || $act=="edit"):
 				'Not compatible with UDP Fast I/O.');
 
 	$section->addInput(new Form_Select(
-		'compression',
-		'Compression',
-		$pconfig['compression'],
-		$openvpn_compression_modes
-	))->setHelp('Compress tunnel packets using the LZO algorithm. %1$s' .
+		'allow_compression',
+		'Allow Compression',
+		$pconfig['allow_compression'],
+		$openvpn_allow_compression
+		))->setHelp('Allow compression to be used with this VPN instance. %1$s' .
 				'Compression can potentially increase throughput but may allow an attacker to extract secrets if they can control ' .
 				'compressed plaintext traversing the VPN (e.g. HTTP). ' .
 				'Before enabling compression, consult information about the VORACLE, CRIME, TIME, and BREACH attacks against TLS ' .
 				'to decide if the use case for this specific VPN is vulnerable to attack. %1$s%1$s' .
+				'Asymmetric compression allows an easier transition when connecting with older peers. %1$s',
+				'<br/>');
+
+	$section->addInput(new Form_Select(
+		'compression',
+		'Compression',
+		$pconfig['compression'],
+		$openvpn_compression_modes
+		))->setHelp('Deprecated. Compress tunnel packets using the LZO algorithm. %1$s' .
+				'Compression can potentially dangerous and insecure. See the note on the Allow Compression option above. %1$s%1$s' .
 				'Adaptive compression will dynamically disable compression for a period of time if OpenVPN detects that the data in the ' .
 				'packets is not being compressed efficiently.',
 				'<br/>');
@@ -1151,6 +1159,15 @@ if ($act=="new" || $act=="edit"):
 		));
 	}
 
+	if (isset($parentid)) {
+		$form->addGlobal(new Form_Input(
+			'parentid',
+			null,
+			'hidden',
+			$parentid
+		));
+	}
+
 	$form->add($section);
 	print($form);
 else:
@@ -1162,8 +1179,9 @@ else:
 			<thead>
 				<tr>
 					<th><?=gettext("Interface")?></th>
-					<th><?=gettext("Protocol")?></th>
+					<th data-sortable-type="alpha"><?=gettext("Protocol")?></th>
 					<th><?=gettext("Server")?></th>
+					<th><?=gettext("Mode / Crypto")?></th>
 					<th><?=gettext("Description")?></th>
 					<th><?=gettext("Actions")?></th>
 				</tr>
@@ -1174,6 +1192,13 @@ else:
 	$i = 0;
 	foreach ($a_client as $client):
 		$server = "{$client['server_addr']}:{$client['server_port']}";
+		$dc = openvpn_build_data_cipher_list($client['data_ciphers'], $client['data_ciphers_fallback'], ($client['ncp_enable'] != "disabled"));
+		$dca = explode(',', $dc);
+		if (count($dca) > 5) {
+			$dca = array_slice($dca, 0, 5);
+			$dca[] = '[...]';
+		}
+		$dc = implode(', ', $dca);
 ?>
 				<tr <?=isset($client['disable']) ? 'class="disabled"':''?>>
 					<td>
@@ -1181,9 +1206,26 @@ else:
 					</td>
 					<td>
 						<?=htmlspecialchars($client['protocol'])?>
+						<br/>(<?= htmlspecialchars(strtoupper(empty($client['dev_mode']) ? 'TUN' : $client['dev_mode'])) ?>)
 					</td>
 					<td>
 						<?=htmlspecialchars($server)?>
+					</td>
+					<td>
+						<strong><?= gettext('Mode') ?>:</strong> <?= htmlspecialchars($openvpn_client_modes[$client['mode']]) ?>
+						<br/>
+						<strong><?= gettext('Data Ciphers') ?>:</strong> <?= htmlspecialchars($dc) ?>
+						<br/>
+						<strong><?= gettext('Digest') ?>:</strong> <?= htmlspecialchars($client['digest']) ?>
+					<?php if (!empty($client['dh_length'])): ?>
+						<br/>
+						<strong><?= gettext('D-H Params') ?>:</strong>
+						<?php if (is_numeric($client['dh_length'])): ?>
+							<?= htmlspecialchars($client['dh_length']) ?> <?= gettext('bits') ?>
+						<?php elseif ($client['dh_length'] == "none"): ?>
+							<?= gettext("Disabled, ECDH Only") ?>
+						<?php endif; ?>
+					<?php endif; ?>
 					</td>
 					<td>
 						<?=htmlspecialchars($client['description'])?>
@@ -1301,6 +1343,11 @@ events.push(function() {
 		hideInput('ping_action_seconds', keepalive);
 	}
 
+	function allow_compression_change() {
+		var hide  = ($('#allow_compression').val() == 'no')
+		hideInput('compression', hide);
+	}
+
 	// ---------- Monitor elements for change and call the appropriate display functions ------------------------------
 
 	 // TLS Authorization
@@ -1343,11 +1390,16 @@ events.push(function() {
 		autotls_change();
 	});
 
+	// Compression Settings
+	$('#allow_compression').change(function () {
+		allow_compression_change();
+	});
+
 	function updateCipher(mem) {
 		var found = false;
 
 		// If the cipher exists, remove it
-		$('[id="ncp-ciphers[]"] option').each(function() {
+		$('[id="data_ciphers[]"] option').each(function() {
 			if($(this).val().toString() == mem) {
 				$(this).remove();
 				found = true;
@@ -1356,7 +1408,7 @@ events.push(function() {
 
 		// If not, add it
 		if (!found) {
-			$('[id="ncp-ciphers[]"]').append(new Option(mem , mem));
+			$('[id="data_ciphers[]"]').append(new Option(mem , mem));
 		}
 	}
 
@@ -1373,7 +1425,7 @@ events.push(function() {
 	});
 
 	// On click, remove the cipher from the list
-	$('[id="ncp-ciphers[]"]').click(function () {
+	$('[id="data_ciphers[]"]').click(function () {
 		if ($(this).val() != null) {
 			updateCiphers($(this).val());
 		}
@@ -1383,7 +1435,7 @@ events.push(function() {
 	// and select all of the chosen ciphers so that they are submitted
 	$('form').submit(function() {
 		$("#availciphers" ).prop( "disabled", true);
-		$('[id="ncp-ciphers[]"] option').attr("selected", "selected");
+		$('[id="data_ciphers[]"] option').attr("selected", "selected");
 	});
 
 	// ---------- Set initial page display state ----------------------------------------------------------------------
@@ -1393,6 +1445,7 @@ events.push(function() {
 	tlsauth_change();
 	useproxy_changed();
 	ping_method_change();
+	allow_compression_change();
 });
 //]]>
 </script>

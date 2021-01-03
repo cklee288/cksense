@@ -54,7 +54,7 @@ if ($_POST['act'] == "del") {
 		}
 		unset($a_vlans[$_POST['id']]);
 
-		write_config();
+		write_config("VLAN interface deleted");
 
 		header("Location: interfaces_vlan.php");
 		exit;
@@ -77,6 +77,7 @@ $tab_array[] = array(gettext("QinQs"), false, "interfaces_qinq.php");
 $tab_array[] = array(gettext("PPPs"), false, "interfaces_ppps.php");
 $tab_array[] = array(gettext("GREs"), false, "interfaces_gre.php");
 $tab_array[] = array(gettext("GIFs"), false, "interfaces_gif.php");
+$tab_array[] = array(gettext("VXLANs"), false, "interfaces_vxlan.php");
 $tab_array[] = array(gettext("Bridges"), false, "interfaces_bridge.php");
 $tab_array[] = array(gettext("LAGGs"), false, "interfaces_lagg.php");
 display_top_tabs($tab_array);
@@ -146,7 +147,7 @@ display_top_tabs($tab_array);
 	<?php print_info_box(sprintf(gettext('Not all drivers/NICs support 802.1Q '.
 		'VLAN tagging properly. %1$sOn cards that do not explicitly support it, VLAN '.
 		'tagging will still work, but the reduced MTU may cause problems.%1$sSee the '.
-		'%2$s handbook for information on supported cards.'), '<br />', $g['product_name']), 'info', false); ?>
+		'%2$s handbook for information on supported cards.'), '<br />', $g['product_label']), 'info', false); ?>
 </div>
 
 <?php

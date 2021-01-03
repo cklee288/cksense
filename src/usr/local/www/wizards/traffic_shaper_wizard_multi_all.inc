@@ -123,11 +123,6 @@ function step2_stepbeforeformdisplay() {
 
 	$fields = &$pkg['step'][1]['fields']['field'];
 
-	/*
-	unset($config['ezshaper']['step2']);
-	$config['ezshaper']['step2'] = array();
-	write_config();
-	*/
 	$fields = array();
 
 	for ($i = 0; $i < $numberoflocalinterfaces; $i++) {
@@ -1768,7 +1763,7 @@ function apply_all_chosen_items() {
 			}
 		}
 	}
-	write_config(gettext("Shaper configuration saved via pfSense traffic shaper wizard."));
+	write_config(gettext("Shaper configuration saved via traffic shaper wizard."));
 }
 
 function wizard_get_bandwidthtype_scale($type = "b") {

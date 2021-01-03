@@ -25,6 +25,7 @@
 require_once("config.inc");
 require_once("rrd.inc");
 require_once("ipsec.inc");
+require_once("interfaces.inc");
 
 /* Returns an array of default values used for dpinger */
 function return_dpinger_defaults() {
@@ -238,14 +239,16 @@ function setup_gateways_monitor() {
 			 */
 			if (is_ipaddrv4($gateway['gateway']) && $gateway['monitor'] != $gateway['gateway']) {
 				log_error(sprintf(gettext('Removing static route for monitor %1$s and adding a new route through %2$s'), $gateway['monitor'], $gateway['gateway']));
-				$route_to = "-host {$gateway['monitor']}";
 				if (interface_isppp_type($gateway['friendlyiface'])) {
-					route_add_or_change("{$route_to} -iface {$gateway['interface']}");
+					route_add_or_change($gateway['monitor'],
+					    '', $gateway['interface']);
+					system_staticroutes_configure($gateway['friendlyiface']);
 				} else {
-					route_add_or_change("{$route_to} {$gateway['gateway']}");
+					route_add_or_change($gateway['monitor'],
+					    $gateway['gateway']);
 				}
 
-				pfSense_kill_states("0.0.0.0/0", $gateway['monitor'], $gateway['interface'], "icmp");
+				pfSense_kill_states("0.0.0.0/0", utf8_encode($gateway['monitor']), utf8_encode($gateway['interface']), "icmp");
 			}
 		} else if ($gateway['ipprotocol'] == "inet6") { // This is an IPv6 gateway...
 			if (is_linklocal($gateway['gateway']) &&
@@ -277,16 +280,18 @@ function setup_gateways_monitor() {
 			 * Add static routes for each gateway with their monitor IP
 			 * not strictly necessary but is a added level of protection.
 			 */
-			if ($gateway['gateway'] != $gateway['monitor']) {
+			if ($gateway['gateway'] != $gateways_arr[$gwname]['monitor']) {
 				log_error(sprintf(gettext('Removing static route for monitor %1$s and adding a new route through %2$s'), $gateway['monitor'], $gateway['gateway']));
-				$route_to = "-host -inet6 {$gateway['monitor']}";
 				if (interface_isppp_type($gateway['friendlyiface'])) {
-					route_add_or_change("{$route_to} -iface {$gateway['interface']}");
+					route_add_or_change($gateway['monitor'],
+					    '', $gateway['interface']);
+					system_staticroutes_configure($gateway['friendlyiface']);
 				} else {
-					route_add_or_change("{$route_to} {$gateway['gateway']}");
+					route_add_or_change($gateway['monitor'],
+					    $gateway['gateway']);
 				}
 
-				pfSense_kill_states("::0.0.0.0/0", $gateway['monitor'], $gateway['interface'], "icmpv6");
+				pfSense_kill_states("::0.0.0.0/0", utf8_encode($gateway['monitor']), utf8_encode($gateway['interface']), "icmpv6");
 			}
 		} else {
 			continue;
@@ -313,13 +318,15 @@ function setup_gateways_monitor() {
 	return;
 }
 
-function get_dpinger_status($gwname, $detailed = false) {
+function get_dpinger_status($gwname, $gways = false, $action_disable = false) {
 	global $g;
 
 	$running_processes = running_dpinger_processes();
 
 	if (!isset($running_processes[$gwname])) {
-		log_error(sprintf(gettext('dpinger: No dpinger session running for gateway %s'), $gwname));
+		log_error(sprintf(gettext(
+		    'dpinger: No dpinger session running for gateway %s'),
+		    $gwname));
 		return false;
 	}
 
@@ -372,7 +379,12 @@ function get_dpinger_status($gwname, $detailed = false) {
 	$r['srcip'] = $proc['srcip'];
 	$r['targetip'] = $proc['targetip'];
 
-	$gateways_arr = return_gateways_array();
+	if (is_array($gways)) {
+		$gateways_arr = $gways;
+	} else {
+		$gateways_arr = return_gateways_array();
+	}
+
 	unset($gw);
 	if (isset($gateways_arr[$gwname])) {
 		$gw = $gateways_arr[$gwname];
@@ -381,9 +393,11 @@ function get_dpinger_status($gwname, $detailed = false) {
 	$r['latency_avg'] = round($r['latency_avg']/1000, 3);
 	$r['latency_stddev'] = round($r['latency_stddev']/1000, 3);
 
-	$r['status'] = "none";
+	$r['status'] = "online";
+	$r['substatus'] = "none";
 	if (isset($gw) && isset($gw['force_down'])) {
-		$r['status'] = "force_down";
+		$r['status'] = "down";
+		$r['substatus'] = "force_down";
 	} else if (isset($gw)) {
 		$settings = return_dpinger_defaults();
 
@@ -402,21 +416,19 @@ function get_dpinger_status($gwname, $detailed = false) {
 		}
 
 		if ($r['latency_avg'] > $settings['latencyhigh']) {
-			if ($detailed) {
-				$r['status'] = "highdelay";
-			} else {
+			if (!$action_disable) {
 				$r['status'] = "down";
 			}
+			$r['substatus'] = "highdelay";
 		} else if ($r['loss'] > $settings['losshigh']) {
-			if ($detailed) {
-				$r['status'] = "highloss";
-			} else {
+			if (!$action_disable) {
 				$r['status'] = "down";
 			}
+			$r['substatus'] = "highloss";
 		} else if ($r['latency_avg'] > $settings['latencylow']) {
-			$r['status'] = "delay";
+			$r['substatus'] = "delay";
 		} else if ($r['loss'] > $settings['losslow']) {
-			$r['status'] = "loss";
+			$r['substatus'] = "loss";
 		}
 	}
 
@@ -424,20 +436,27 @@ function get_dpinger_status($gwname, $detailed = false) {
 }
 
 /* return the status of the dpinger targets as an array */
-function return_gateways_status($byname = false) {
+function return_gateways_status($byname = false, $gways = false) {
 	global $config, $g;
 
 	$dpinger_gws = running_dpinger_processes();
 	$status = array();
 
-	$gateways_arr = return_gateways_array();
+	if (is_array($gways)) {
+		$gateways_arr = $gways;
+	} else {
+		$gateways_arr = return_gateways_array();
+	}
 
 	foreach ($dpinger_gws as $gwname => $gwdata) {
-		// If action is disabled for this gateway, then we want a detailed status.
-		// That reports "highdelay" or "highloss" rather than just "down".
-		// Because reporting the gateway down would be misleading (gateway action is disabled)
-		$detailed = $gateways_arr[$gwname]['action_disable'];
-		$dpinger_status = get_dpinger_status($gwname, $detailed);
+		/*
+		 * If action is disabled for this gateway, then we want a
+		 * detailed status.  That reports "highdelay" or "highloss"
+		 * rather than just "down".  Because reporting the gateway
+		 * down would be misleading (gateway action is disabled)
+		 */
+		$action_disable = $gateways_arr[$gwname]['action_disable'];
+		$dpinger_status = get_dpinger_status($gwname, $action_disable);
 		if ($dpinger_status === false) {
 			continue;
 		}
@@ -452,10 +471,19 @@ function return_gateways_status($byname = false) {
 		$status[$target]['monitorip'] = $dpinger_status['targetip'];
 		$status[$target]['srcip'] = $dpinger_status['srcip'];
 		$status[$target]['name'] = $gwname;
-		$status[$target]['delay'] = empty($dpinger_status['latency_avg']) ? "0ms" : $dpinger_status['latency_avg'] . "ms";
-		$status[$target]['stddev'] = empty($dpinger_status['latency_stddev']) ? "0ms" : $dpinger_status['latency_stddev'] . "ms";
-		$status[$target]['loss'] = empty($dpinger_status['loss']) ? "0.0%" : round($dpinger_status['loss'], 1) . "%";
+		$status[$target]['delay'] =
+		    empty($dpinger_status['latency_avg'])
+		    ? "0ms"
+		    : $dpinger_status['latency_avg'] . "ms";
+		$status[$target]['stddev'] =
+		    empty($dpinger_status['latency_stddev'])
+		    ? "0ms"
+		    : $dpinger_status['latency_stddev'] . "ms";
+		$status[$target]['loss'] = empty($dpinger_status['loss'])
+		    ? "0.0%"
+		    : round($dpinger_status['loss'], 1) . "%";
 		$status[$target]['status'] = $dpinger_status['status'];
+		$status[$target]['substatus'] = $dpinger_status['substatus'];
 	}
 
 	/* tack on any gateways that have monitoring disabled
@@ -489,13 +517,15 @@ function return_gateways_status($byname = false) {
 			$status[$target]['delay'] = "0.0ms";
 			$status[$target]['loss'] = "100.0%";
 			$status[$target]['status'] = "down";
+			$status[$target]['substatus'] = "down";
 		} else {
 			$status[$target]['monitorip'] = $tgtip;
 			$status[$target]['srcip'] = $srcip;
 			$status[$target]['name'] = $gwitem['name'];
 			$status[$target]['delay'] = "";
 			$status[$target]['loss'] = "";
-			$status[$target]['status'] = "none";
+			$status[$target]['status'] = "online";
+			$status[$target]['substatus'] = "none";
 		}
 
 		$status[$target]['monitor_disable'] = true;
@@ -516,7 +546,8 @@ function return_gateways_status_text($byname = false, $brief = false) {
 				'delay' => "Delay",
 				'stddev' => "StdDev",
 				'loss' => "Loss",
-				'status' => "Status");
+				'status' => "Status",
+				'substatus' => "Substatus");
 	}
 	foreach ($gwstat as $gw) {
 		foreach ($gw as $gwdidx => $gwdata) {
@@ -585,8 +616,8 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 
 	$gateways_arr = array();
 	$gateways_arr_temp = array();
-	$cgw4 = getcurrentdefaultgatewayip('inet');
-	$cgw6 = getcurrentdefaultgatewayip('inet6');
+	$cgw4 = route_get_default('inet');
+	$cgw6 = route_get_default('inet6');
 	$found_defaultv4 = 0;
 	$found_defaultv6 = 0;
 
@@ -600,7 +631,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 			if (!is_array($gateway) || empty($gateway)) {
 				continue;
 			}
-			
+
 			/* Increment it here to do not skip items */
 			$i++;
 			if (isset($gateway['defaultgw'])) {
@@ -664,6 +695,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 			}
 
 			$gateway['friendlyiface'] = $gateway['interface'];
+			$gateway['friendlyifdescr'] = convert_friendly_interface_to_friendly_descr($gateway['interface']);
 
 			/* special treatment for tunnel interfaces */
 			if ($gateway['ipprotocol'] == "inet6") {
@@ -778,7 +810,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 							}
 							if (!isset($ph1ent['mobile']) && ($keyexchange == 'ikev1' || isset($ph1ent['splitconn']))) {
 								foreach ($vtisubnet_spec as $idx => $vtisub) {
-									if ($ifcfg['if'] == "ipsec{$ph1ent['ikeid']}00{$idx}") {
+									if ($ifcfg['if'] == ("ipsec" . get_ipsecifnum($ph1ent['ikeid'], $idx))) {
 										// If this specific VTI remote is v4, then we can make a v4 gw
 										if (is_ipaddrv4($vtisub['right'])) {
 											$ctype = "VTIv4";
@@ -786,7 +818,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 									}
 								}
 							} else {
-								if ($ifcfg['if'] == "ipsec{$ph1ent['ikeid']}000") {
+								if ($ifcfg['if'] == ("ipsec" . get_ipsecifnum($ph1ent['ikeid'], 0))) {
 									// If any of the VTI remotes are v4, then we can make a v4 gw
 									foreach ($vtisubnet_spec as $vtisub) {
 										if (is_ipaddrv4($vtisub['right'])) {
@@ -813,6 +845,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 		$gateway['gateway'] = get_interface_gateway($ifname, $gateway['dynamic']);
 		$gateway['interface'] = get_real_interface($ifname);
 		$gateway['friendlyiface'] = $ifname;
+		$gateway['friendlyifdescr'] = convert_friendly_interface_to_friendly_descr($ifname);
 		$gateway['name'] = "{$friendly}{$ctype}";
 		$gateway['attribute'] = "system";
 
@@ -920,7 +953,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 							}
 							if (!isset($ph1ent['mobile']) && ($keyexchange == 'ikev1' || isset($ph1ent['splitconn']))) {
 								foreach ($vtisubnet_spec as $idx => $vtisub) {
-									if ($ifcfg['if'] == "ipsec{$ph1ent['ikeid']}00{$idx}") {
+									if ($ifcfg['if'] == ("ipsec" . get_ipsecifnum($ph1ent['ikeid'], $idx))) {
 										// If this specific VTI remote is v6, then we can make a v6 gw
 										if (is_ipaddrv6($vtisub['right'])) {
 											$ctype = "VTIv6";
@@ -928,7 +961,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 									}
 								}
 							} else {
-								if ($ifcfg['if'] == "ipsec{$ph1ent['ikeid']}000") {
+								if ($ifcfg['if'] == ("ipsec" . get_ipsecifnum($ph1ent['ikeid'], 0))) {
 									// If any of the VTI remotes are v6, then we can make a v6 gw
 									foreach ($vtisubnet_spec as $vtisub) {
 										if (is_ipaddrv6($vtisub['right'])) {
@@ -961,6 +994,7 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 				break;
 		}
 		$gateway['friendlyiface'] = $ifname;
+		$gateway['friendlyifdescr'] = convert_friendly_interface_to_friendly_descr($ifname);
 		$gateway['name'] = "{$friendly}{$ctype}";
 		$gateway['attribute'] = "system";
 
@@ -1049,7 +1083,15 @@ function return_gateways_array($disabled = false, $localhost = false, $inactive 
 			}
 		}
 	}
-	return order_gateways_as_configured($gateways_arr);
+
+	$gways = order_gateways_as_configured($gateways_arr);
+
+	// Add the tier names here so that system_gateways.php doesn't need to
+	foreach ($gways as $idx => $gway) {
+		$gways[$idx]['tiername'] = gateway_getgwtiername($gways, $idx);
+	}
+
+	return $gways;
 }
 
 function fixup_default_gateway($ipprotocol, $gateways_status, $gateways_arr) {
@@ -1080,7 +1122,7 @@ function fixup_default_gateway($ipprotocol, $gateways_status, $gateways_arr) {
 			if ($gwsttng['ipprotocol'] != $ipprotocol) {
 				continue;
 			}
-			
+
 			if ((isset($gwsttng['monitor_disable']) || isset($gwsttng['action_disable']) || $gateways_status[$gwname]['status'] == "none")) {
 				$set_dfltgwname = $gwname;
 				break;
@@ -1090,7 +1132,6 @@ function fixup_default_gateway($ipprotocol, $gateways_status, $gateways_arr) {
 			}
 		}
 		if (empty($set_dfltgwname)) {
-			openlog("", LOG_PID, LOG_LOCAL0);
 			log_error(sprintf("Gateway, none 'available' for %s, use the first one configured. '%s'", $ipprotocol, $fallback));
 			$set_dfltgwname = $fallback;
 		}
@@ -1109,7 +1150,7 @@ function fixup_default_gateway($ipprotocol, $gateways_status, $gateways_arr) {
 		}
 
 		if (count($gwg_members) > 0) {
-			$currentdefaultgwip = getcurrentdefaultgatewayip($ipprotocol);
+			$currentdefaultgwip = route_get_default($ipprotocol);
 			$found_current = false;
 			foreach($gwg_members as $gwgroupitem) {
 				if (!empty($currentdefaultgwip) && ($gwgroupitem['gwip'] == $currentdefaultgwip)) {
@@ -1132,10 +1173,6 @@ function fixup_default_gateway($ipprotocol, $gateways_status, $gateways_arr) {
 	if (!empty($set_dfltgwname) && isset($gateways_arr[$set_dfltgwname])) {
 		setdefaultgateway($gateways_arr[$set_dfltgwname]);
 	}
-}
-
-function getcurrentdefaultgatewayip($ipprotocol) {
-	return trim(exec("/sbin/route -n get -{$ipprotocol} default 2>/dev/null | /usr/bin/awk '/gateway:/ {print $2}'"), " \n");
 }
 
 function setdefaultgateway($gw) {
@@ -1162,7 +1199,7 @@ function setdefaultgateway($gw) {
 			$gw['gateway'] .= "%" . $gw['interface'];
 		}
 	}
-	$currentdefaultgwip = getcurrentdefaultgatewayip($ipprotocol);
+	$currentdefaultgwip = route_get_default($ipprotocol);
 	if ($currentdefaultgwip != $gw['gateway']) {
 		log_error("Default gateway setting {$gw['descr']} as default.");
 
@@ -1178,13 +1215,15 @@ function setdefaultgateway($gw) {
 
 		if (isset($gw["nonlocalgateway"])) {
 			if (is_ipaddr($gw['gateway']) && !empty($gw['interface'])) {
-				route_add_or_change("-{$ipprotocol} {$gw['gateway']} -iface {$gw['interface']}");
+				route_add_or_change($gw['gateway'], '',
+				    $gw['interface']);
 			}
 		}
 		if (isset($config['system']['route-debug'])) {
 			file_put_contents("/dev/console", "\n[".getmypid()."] SET DEF GW: {$gw['name']} ({$gw['gateway']})");
 		}
-		route_add_or_change("-{$ipprotocol} default {$gw['gateway']}");
+		route_add_or_change("default", $gw['gateway'], '', '',
+		    $ipprotocol);
 		return true;
 	}
 }
@@ -1216,16 +1255,17 @@ function get_gwgroup_members_inner($group, $gateways_status, $gateways_arr, $vip
 			$status = $gateways_status[$gwname];
 			$gwdown = false;
 			if (stristr($status['status'], "down")) {
-				$msg = sprintf(gettext('MONITOR: %1$s is down, omitting from routing group %2$s'), $gwname, $group['name']);
 				$gwdown = true;
-			} else if (stristr($status['status'], "loss") && strstr($group['trigger'], "loss")) {
-				/* packet loss */
-				$msg = sprintf(gettext('MONITOR: %1$s has packet loss, omitting from routing group %2$s'), $gwname, $group['name']);
-				$gwdown = true;
-			} else if (stristr($status['status'], "delay") && strstr($group['trigger'] , "latency")) {
-				/* high latency */
-				$msg = sprintf(gettext('MONITOR: %1$s has high latency, omitting from routing group %2$s'), $gwname, $group['name']);
-				$gwdown = true;
+				switch ($status['substatus']) {
+					case "highloss":
+						$msg = sprintf(gettext('MONITOR: %1$s has packet loss, omitting from routing group %2$s'), $gwname, $group['name']);
+						break;
+					case "highdelay":
+						$msg = sprintf(gettext('MONITOR: %1$s has high latency, omitting from routing group %2$s'), $gwname, $group['name']);
+						break;
+					default:
+						$msg = sprintf(gettext('MONITOR: %1$s is down, omitting from routing group %2$s'), $gwname, $group['name']);
+				}
 			}
 			$statuschanged = false;
 			$pluginparams = array();
@@ -1245,7 +1285,7 @@ function get_gwgroup_members_inner($group, $gateways_status, $gateways_arr, $vip
 				}
 				$tiers[$tier][] = $gwname;
 				if (unlink_if_exists("/tmp/.down.{$gwname}")) {
-					$msg = sprintf(getmypid () . gettext('MONITOR: %1$s is available now, adding to routing group %2$s'), $gwname, $group['name']);
+					$msg = sprintf(gettext('MONITOR: %1$s is available now, adding to routing group %2$s'), $gwname, $group['name']);
 					$msg .= "\n".implode("|", $status);
 					$pluginparams['event'] = 'gateway.up';
 					$statuschanged = true;
@@ -1253,7 +1293,7 @@ function get_gwgroup_members_inner($group, $gateways_status, $gateways_arr, $vip
 			}
 			if ($statuschanged) {
 				log_error($msg);
-				notify_via_smtp($msg);
+				notify_all_remote($msg);
 				if (isset($gateways_arr[$gwname]['interface'])) {
 					$pluginparams['interface'] = $gateways_arr[$gwname]['interface'];
 				}
@@ -1335,16 +1375,21 @@ function get_gwgroup_members($groupname) {
  * Return an array with all gateway groups with name as key
  * All gateway groups will be processed before returning the array.
  */
-function return_gateway_groups_array($fixup = false) {
+function return_gateway_groups_array($fixup = false, $gways = false) {
 	global $config;
 
 	/* fetch the current gateways status */
-	$gateways_status = return_gateways_status(true);
+	if (is_array($gways)) {
+		$gateways_status = $gways;
+	} else {
+		$gateways_status = return_gateways_status(true);
+	}
+
 	$gateways_arr = return_gateways_array();
 	$gateway_groups_array = array();
 	if ($fixup == true) {
-		$gw4 = lookup_gateway_or_group_by_name($config['gateways']['defaultgw4']);
-		$gw6 = lookup_gateway_or_group_by_name($config['gateways']['defaultgw6']);
+		$gw4 = lookup_gateway_or_group_by_name($config['gateways']['defaultgw4'], $gways);
+		$gw6 = lookup_gateway_or_group_by_name($config['gateways']['defaultgw6'], $gways);
 		if ($gw4 && $gw4['type'] == 'gatewaygroup') {
 			fixup_default_gateway("inet", $gateways_status, $gateways_arr);
 		}
@@ -1352,7 +1397,8 @@ function return_gateway_groups_array($fixup = false) {
 			fixup_default_gateway("inet6", $gateways_status, $gateways_arr);
 		}
 	}
-	if (is_array($config['gateways']['gateway_group'])) {
+	init_config_arr(array('gateways', 'gateway_group'));
+	if (!empty($config['gateways']['gateway_group'])) {
 		$viplist = get_configured_vip_list();
 		foreach ($config['gateways']['gateway_group'] as $group) {
 			$gateway_groups_array[$group['name']] = get_gwgroup_members_inner($group, $gateways_status, $gateways_arr, $viplist);
@@ -1387,10 +1433,15 @@ function dhclient_update_gateway_groups_defaultroute($interface = "wan") {
 	}
 }
 
-function lookup_gateway_or_group_by_name($gwname) {
+function lookup_gateway_or_group_by_name($gwname, $gways = false) {
 	global $config;
 
-	$gateways_arr = return_gateways_array();
+	if (is_array($gways)) {
+		$gateways_arr = $gways;
+	} else {
+		$gateways_arr = return_gateways_array();
+	}
+
 	foreach ($gateways_arr as $gw) {
 		if ($gw['name'] == $gwname) {
 			$gw['type'] = 'gateway';
@@ -1398,12 +1449,11 @@ function lookup_gateway_or_group_by_name($gwname) {
 		}
 	}
 
-	if (is_array($config['gateways']['gateway_group'])) {
-		foreach ($config['gateways']['gateway_group'] as $gwg) {
-			if ($gwg['name'] == $gwname) {
-				$gwg['type'] = 'gatewaygroup';
-				return $gwg;
-			}
+	init_config_arr(array('gateways', 'gateway_group'));
+	foreach ($config['gateways']['gateway_group'] as $gwg) {
+		if ($gwg['name'] == $gwname) {
+			$gwg['type'] = 'gatewaygroup';
+			return $gwg;
 		}
 	}
 
@@ -1460,7 +1510,7 @@ function get_root_interface($interface) {
 
 function get_interface_gateway($interface, &$dynamic = false) {
 	global $config, $g;
-	
+
 	$interface = get_root_interface($interface);
 
 	$gw = NULL;
@@ -2022,25 +2072,21 @@ function save_gateway($gateway_settings, $realid = "") {
 	}
 
 	/* NOTE: If gateway ip is changed need to cleanup the old static interface route */
-	if ($gateway_settings['monitor'] != "dynamic" && !empty($a_gateway_item[$realid]) && is_ipaddr($a_gateway_item[$realid]['gateway']) &&
-		$gateway['gateway'] != $a_gateway_item[$realid]['gateway'] &&
-		isset($a_gateway_item[$realid]["nonlocalgateway"])) {
-		$realif = get_real_interface($a_gateway_item[$realid]['interface']);
-		$inet = (!is_ipaddrv4($a_gateway_item[$realid]['gateway']) ? "-inet6" : "-inet");
-		$rgateway = $a_gateway_item[$realid]['gateway'];
-		$cmd = "/sbin/route delete $inet " . escapeshellarg($a_gateway_item[$realid]['gateway']) . " -iface " . escapeshellarg($realif) . " " . escapeshellarg($rgateway);
-		mwexec($cmd);
+	if ($gateway_settings['monitor'] != "dynamic" &&
+	    !empty($a_gateway_item[$realid]) &&
+	    is_ipaddr($a_gateway_item[$realid]['gateway']) &&
+	    $gateway['gateway'] != $a_gateway_item[$realid]['gateway'] &&
+	    isset($a_gateway_item[$realid]["nonlocalgateway"])) {
+		route_del($a_gateway_item[$realid]['gateway']);
 	}
 
 	/* NOTE: If monitor ip is changed need to cleanup the old static route */
-	if ($gateway_settings['monitor'] != "dynamic" && !empty($a_gateway_item[$realid]) && is_ipaddr($a_gateway_item[$realid]['monitor']) &&
-		$gateway_settings['monitor'] != $a_gateway_item[$realid]['monitor'] && $gateway['gateway'] != $a_gateway_item[$realid]['monitor']) {
-		$rgateway = $a_gateway_item[$realid]['gateway'];
-		if (is_ipaddrv4($a_gateway_item[$realid]['monitor'])) {
-			mwexec("/sbin/route delete " . escapeshellarg($a_gateway_item[$realid]['monitor']) . " " . escapeshellarg($rgateway));
-		} else {
-			mwexec("/sbin/route delete -inet6 " . escapeshellarg($a_gateway_item[$realid]['monitor']) . " " . escapeshellarg($rgateway));
-		}
+	if ($gateway_settings['monitor'] != "dynamic" &&
+	    !empty($a_gateway_item[$realid]) &&
+	    is_ipaddr($a_gateway_item[$realid]['monitor']) &&
+	    $gateway_settings['monitor'] != $a_gateway_item[$realid]['monitor'] &&
+	    $gateway['gateway'] != $a_gateway_item[$realid]['monitor']) {
+		route_del($a_gateway_item[$realid]['monitor']);
 	}
 
 	if ($gateway_settings['defaultgw'] == "yes" || $gateway_settings['defaultgw'] == "on") {
@@ -2095,7 +2141,7 @@ function save_gateway($gateway_settings, $realid = "") {
 
 	mark_subsystem_dirty('staticroutes');
 
-	write_config();
+	write_config("Gateway settings changed");
 
 	if (!empty($reloadif)) {
 		send_event("interface reconfigure {$reloadif}");
@@ -2123,12 +2169,12 @@ function gateway_set_enabled($name, $enabled) {
 			if (is_ipaddr($gateway['gateway'])) {
 				$inet = (!is_ipaddrv4($gateway['gateway']) ? 'inet6' : 'inet');
 				if ($inet == 'inet') {
-					$cgw = getcurrentdefaultgatewayip('inet');
+					$cgw = route_get_default('inet');
 				} else {
-					$cgw = getcurrentdefaultgatewayip('inet6');
+					$cgw = route_get_default('inet6');
 				}
 				if ($gateway['gateway'] == $cgw) {
-					mwexec("/sbin/route delete -{$inet} default " . escapeshellarg($cgw));
+					route_del("default", $inet);
 				}
 			}
 			$gateway['disabled'] = true;
@@ -2154,5 +2200,111 @@ function gateway_or_gwgroup_exists($name) {
 	}
 	return false;
 }
+
+// These two replacement functions avoid the need to call return_gateways_array() multiple times and
+// allow system_gateways.php to get everything it needs in a single function call
+function gateway_getgwtiername($gways, $idx) {
+	global $config;
+
+	$result = "";
+	$gwname = $gways[$idx]['name'];
+
+	$gw = get_gateway_or_group_by_name($gwname, $gways);
+	init_config_arr(array('gateways'));
+	if ($config['gateways']['defaultgw4'] == $gwname || $config['gateways']['defaultgw6'] == $gwname) {
+		$result = "Default";
+	} else {
+		if ($gw['ipprotocol'] == 'inet') {
+			$defgw = get_gateway_or_group_by_name($config['gateways']['defaultgw4'], $gways);
+		} else {
+			$defgw = get_gateway_or_group_by_name($config['gateways']['defaultgw6'], $gways);
+		}
+
+		if ($defgw['type'] == "gatewaygroup") {
+			$detail = gateway_is_gwgroup_member($gwname, true);
+			foreach($detail as $gwitem) {
+				if ($gwitem['name'] == $defgw['name']) {
+					if (isset($gwitem['tier'])) {
+						$result = "Tier " . $gwitem['tier'];
+						break;
+					}
+				}
+			}
+		}
+    }
+
+	if (!empty($result)) {
+		if ($gw['ipprotocol'] == "inet") {
+			$result .= " (IPv4)";
+		} elseif ($gw['ipprotocol'] == "inet6") {
+			$result .= " (IPv6)";
+		}
+	}
+
+	return $result;
+}
+
+function get_gateway_or_group_by_name($gwname, $gateways_arr) {
+	global $config;
+
+	foreach ($gateways_arr as $gw) {
+		if ($gw['name'] == $gwname) {
+			$gw['type'] = 'gateway';
+			return $gw;
+		}
+	}
+
+	init_config_arr(array('gateways', 'gateway_group'));
+	foreach ($config['gateways']['gateway_group'] as $gwg) {
+		if ($gwg['name'] == $gwname) {
+			$gwg['type'] = 'gatewaygroup';
+			return $gwg;
+		}
+	}
+
+	return false;
+}
+
+// Compose a list of available gateways but without the need to call return_gateways_array() multiple times
+// Previously that function could be called eight times per gateway!
+function available_default_gateways() {
+	global $config;
+
+	$gways = return_gateways_array(true, false, true, true);
+
+	$items4 = array();
+	$items6 = array();
+	$items4[''] = "Automatic";
+	$items6[''] = "Automatic";
+	foreach($gways as $gw) {
+		$gwn = $gw['name'];
+		if ($gw['ipprotocol'] == "inet6") {
+			$items6[$gwn] = $gwn;
+		} else {
+			$items4[$gwn] = $gwn;
+		}
+	}
+
+	$groups = return_gateway_groups_array(false, $gways);
+	foreach ($groups as $key => $group) {
+		$gwn = $group['descr'];
+		if ($group['ipprotocol'] == "inet6") {
+			$items6[$key] = "$key ($gwn)";
+		} else {
+			$items4[$key] = "$key ($gwn)";
+		}
+	}
+	$items4['-'] = "None";
+	$items6['-'] = "None";
+
+	$defaults = array();
+	$defaults['v4'] = $items4;
+	$defaults['v6'] = $items6;
+	$defaults['defaultgw4'] = $config['gateways']['defaultgw4'];
+	$defaults['defaultgw6'] = $config['gateways']['defaultgw6'];
+
+	return $defaults;
+}
+
 
 ?>

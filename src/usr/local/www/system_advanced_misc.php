@@ -328,7 +328,7 @@ if ($_POST) {
 			install_cron_job("/etc/rc.backup_logs.sh", ($config['system']['logsbackup'] > 0), $minute="0", "*/{$config['system']['logsbackup']}", '*', '*', '*', 'root', false);
 		}
 
-		write_config();
+		write_config("Miscellaneous Advanced Settings saved");
 
 		$changes_applied = true;
 		$retval = 0;
@@ -660,7 +660,7 @@ $section->addInput(new Form_Checkbox(
 	'Netgate Device ID',
 	'Do NOT send Netgate Device ID with user agent',
 	$pconfig['do_not_send_uniqueid']
-))->setHelp('Enable this option to not send Netgate Device ID to pfSense as part of User-Agent header.');
+))->setHelp('Enable this option to not send Netgate Device ID as part of User-Agent header.');
 
 $form->add($section);
 

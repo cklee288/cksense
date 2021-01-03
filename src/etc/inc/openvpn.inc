@@ -123,15 +123,22 @@ $openvpn_client_modes = array(
 	'p2p_tls' => gettext("Peer to Peer ( SSL/TLS )"),
 	'p2p_shared_key' => gettext("Peer to Peer ( Shared Key )"));
 
+global $openvpn_allow_compression;
+$openvpn_allow_compression = array(
+	'asym' => gettext("Decompress incoming, do not compress outgoing (Asymmetric)"),
+	'no'   => gettext("Refuse any non-stub compression (Most secure)"),
+	'yes'  => gettext("Compress packets (WARNING: Potentially dangerous!)"),
+);
+
 global $openvpn_compression_modes;
 $openvpn_compression_modes = array(
+	'' => gettext("Disable Compression [Omit Preference]"),
 	'none' => gettext("Disable Compression, retain compression packet framing [compress]"),
+	'stub' => gettext("Enable Compression (stub) [compress stub]"),
+	'stub-v2' => gettext("Enable Compression (stub v2) [compress stub-v2]"),
 	'lz4' => gettext("LZ4 Compression [compress lz4]"),
 	'lz4-v2' => gettext("LZ4 Compression v2 [compress lz4-v2]"),
 	'lzo' => gettext("LZO Compression [compress lzo, equivalent to comp-lzo yes for compatibility]"),
-	'stub' => gettext("Enable Compression (stub) [compress stub]"),
-	'stub-v2' => gettext("Enable Compression (stub v2) [compress stub-v2]"),
-	'' => gettext("Omit Preference (Use OpenVPN Default)"),
 	'noadapt' => gettext("Omit Preference, + Disable Adaptive LZO Compression [Legacy style, comp-noadapt]"),
 	'adaptive' => gettext("Adaptive LZO Compression [Legacy style, comp-lzo adaptive]"),
 	'yes' => gettext("LZO Compression [Legacy style, comp-lzo yes]"),
@@ -827,7 +834,7 @@ function openvpn_reconfigure($mode, $settings) {
 			$proto = "{$proto}-{$mode}";
 	}
 	$dev_mode = $settings['dev_mode'];
-	$cipher = $settings['crypto'];
+	$fbcipher = $settings['data_ciphers_fallback'];
 	// OpenVPN defaults to SHA1, so use it when unset to maintain compatibility.
 	$digest = !empty($settings['digest']) ? $settings['digest'] : "SHA1";
 
@@ -893,7 +900,6 @@ function openvpn_reconfigure($mode, $settings) {
 	$conf .= "persist-tun\n";
 	$conf .= "persist-key\n";
 	$conf .= "proto {$proto}\n";
-	$conf .= "cipher {$cipher}\n";
 	$conf .= "auth {$digest}\n";
 	$conf .= "up /usr/local/sbin/ovpn-linkup\n";
 	$conf .= "down /usr/local/sbin/ovpn-linkdown\n";
@@ -907,14 +913,12 @@ function openvpn_reconfigure($mode, $settings) {
 		}
 	}
 	if ($settings['dev_mode'] === 'tun' && isset($config['unbound']['enable']) && isset($config['unbound']['regovpnclients'])) {
-		switch($settings['mode']) {
-			case 'server_tls':
-			case 'server_tls_user':
-				$domain = !empty($settings['dns_domain']) ? $settings['dns_domain'] : $config['system']['domain'];
-				if (is_domain($domain)) {
-					$conf .= "learn-address \"/usr/local/sbin/openvpn.learn-address.sh $domain\"\n";
-				}
-				break;
+		if (($settings['mode'] == 'server_tls') || ($settings['mode'] == 'server_tls_user') ||
+		    (($settings['mode'] == 'server_user') && ($settings['username_as_common_name'] == 'enabled'))) {
+			$domain = !empty($settings['dns_domain']) ? $settings['dns_domain'] : $config['system']['domain'];
+			if (is_domain($domain)) {
+				$conf .= "learn-address \"/usr/local/sbin/openvpn.learn-address.sh $domain\"\n";
+			}
 		}
 	}
 
@@ -979,11 +983,19 @@ function openvpn_reconfigure($mode, $settings) {
 				// If the CIDR is less than a /30, OpenVPN will complain if you try to
 				//  use the server directive. It works for a single client without it.
 				//  See ticket #1417
-				if (!empty($ip) && !empty($mask) && ($cidr < 30)) {
-					$conf .= "server {$ip} {$mask}\n";
-					$conf .= "client-config-dir {$g['openvpn_base']}/server{$vpnid}/csc\n";
+				if ((!empty($ip) && !empty($mask)) ||
+				    (!empty($ipv6) && !empty($prefix))) {
+					$add_ccd = false;
+					if (is_ipaddr($ip) && ($cidr < 30)) {
+						$add_ccd = true;
+						$conf .= "server {$ip} {$mask}\n";
+					}
 					if (is_ipaddr($ipv6)) {
+						$add_ccd = true;
 						$conf .= "server-ipv6 {$ipv6}/{$prefix}\n";
+					}
+					if ($add_ccd) {
+						$conf .= "client-config-dir {$g['openvpn_base']}/server{$vpnid}/csc\n";
 					}
 				}
 			case 'p2p_shared_key':
@@ -1007,8 +1019,11 @@ function openvpn_reconfigure($mode, $settings) {
 			case 'server_tls':
 			case 'server_user':
 			case 'server_tls_user':
-				if (!empty($ip) && !empty($mask)) {
-					$conf .= "server {$ip} {$mask}\n";
+				if ((!empty($ip) && !empty($mask)) ||
+				    (!empty($ipv6) && !empty($prefix))) {
+					if (is_ipaddr($ip)) {
+						$conf .= "server {$ip} {$mask}\n";
+					}
 					if (is_ipaddr($ipv6)) {
 						$conf .= "server-ipv6 {$ipv6}/{$prefix}\n";
 					}
@@ -1296,18 +1311,22 @@ function openvpn_reconfigure($mode, $settings) {
 				}
 				openvpn_add_keyfile($settings['tls'], $conf, $mode_id, $tls_directive, $tlsopt);
 			}
-
-			/* NCP support. If it is not set, assume enabled since that is OpenVPN's default. */
-			if ($settings['ncp_enable'] == "disabled") {
-				$conf .= "ncp-disable\n";
-			} else {
-				/* If the ncp-ciphers list is empty, don't specify a list so OpenVPN's default will be used. */
-				if (!empty($settings['ncp-ciphers'])) {
-					$conf .= "ncp-ciphers " . str_replace(',', ':', $settings['ncp-ciphers']) . "\n";
-				}
-			}
-
 			break;
+	}
+
+	/* Data encryption cipher support.
+	 * If it is not set, assume enabled since that is OpenVPN's default.
+	 * Note that diabling this is now deprecated and will be removed in a future version of OpenVPN */
+	if ($settings['ncp_enable'] == "disabled") {
+		$conf .= "ncp-disable\n";
+		$conf .= "cipher {$fbcipher}\n";
+	} else {
+		$conf .= "data-ciphers " . str_replace(',', ':', openvpn_build_data_cipher_list($settings['data_ciphers'], $fbcipher)) . "\n";
+		$conf .= "data-ciphers-fallback {$fbcipher}\n";
+	}
+
+	if (!empty($settings['allow_compression'])) {
+		$conf .= "allow-compression {$settings['allow_compression']}\n";
 	}
 
 	$compression = "";
@@ -1334,7 +1353,8 @@ function openvpn_reconfigure($mode, $settings) {
 			break;
 	}
 
-	if (!empty($compression)) {
+	if (($settings['allow_compression'] != 'no') &&
+	    !empty($compression)) {
 		$conf .= "{$compression}\n";
 		if ($settings['compression_push']) {
 			$conf .= "push \"{$compression}\"\n";
@@ -1524,6 +1544,9 @@ function openvpn_delete($mode, $settings) {
 	/* destroy the device */
 	pfSense_interface_destroy($devname);
 
+	/* Invalidate cache */
+	get_interface_arr(true);
+
 	/* remove the configuration files */
 	@array_map('unlink', glob("{$g['openvpn_base']}/{$mode_id}/csc/*"));
 	@array_map('unlink', glob("{$g['openvpn_base']}/{$mode_id}/*"));
@@ -1662,7 +1685,6 @@ function openvpn_resync_all($interface = "") {
 		$config['openvpn'] = array();
 	}
 
-	openlog("", LOG_PID, LOG_LOCAL0);
 	if ($interface <> "") {
 		log_error(sprintf(gettext("Resyncing OpenVPN instances for interface %s."), convert_friendly_interface_to_friendly_descr($interface)));
 	} else {
@@ -2222,4 +2244,17 @@ function openvpn_is_tunnel_network_in_use($net) {
 	}
 	return false;
 }
+
+function openvpn_build_data_cipher_list($data_ciphers = 'AES-256-GCM,AES-128-GCM,CHACHA20-POLY1305', $fallback_cipher = 'AES-256-GBC', $ncp_enabled = true) {
+	/* If the data_ciphers list is empty, populate it with the fallback cipher. */
+	if (empty($data_ciphers) || !$ncp_enabled) {
+		$data_ciphers = $fallback_cipher;
+	}
+	/* Add the fallback cipher to the data ciphers list if it isn't already present */
+	if (!in_array($fallback_cipher, explode(',', $data_ciphers))) {
+		$data_ciphers .= ',' . $fallback_cipher;
+	}
+	return $data_ciphers;
+}
+
 ?>

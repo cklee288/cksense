@@ -95,6 +95,17 @@ if ($_POST) {
 		$input_errors[] = gettext("The supplied value for Minimum Poll Interval is higher than NTP Maximum Poll Interval.");
 	}
 
+	if (isset($pconfig['serverauth'])) {
+		if (empty($pconfig['serverauthkey'])) {
+			$input_errors[] = gettext("The supplied value for NTP Authentication key can't be empty.");
+		} elseif (($pconfig['serverauthalgo'] == 'md5') && (strlen(base64_decode($pconfig['serverauthkey'])) > 16)) {
+			$input_errors[] = gettext("The supplied value for NTP Authentication key for MD5 digest must be from 1 to 16 printable characters.");
+		} elseif (($pconfig['serverauthalgo'] == 'sha1') && ((strlen(base64_decode($pconfig['serverauthkey'])) != 40) ||
+		    !ctype_xdigit($pconfig['serverauthkey']))) {
+			$input_errors[] = gettext("The supplied value for NTP Authentication key for SHA1 digest must be hex-encoded string of 40 characters.");
+		}
+	}
+
 	if (!$input_errors) {
 		$config['ntpd']['enable'] = isset($_POST['enable']) ? 'enabled' : 'disabled';
 		if (is_array($_POST['interface'])) {
@@ -142,6 +153,7 @@ if ($_POST) {
 		$config['ntpd']['orphan'] = trim($pconfig['ntporphan']);
 		$config['ntpd']['ntpminpoll'] = $pconfig['ntpminpoll'];
 		$config['ntpd']['ntpmaxpoll'] = $pconfig['ntpmaxpoll'];
+		$config['ntpd']['dnsresolv'] = $pconfig['dnsresolv'];
 
 		if (!empty($_POST['logpeer'])) {
 			$config['ntpd']['logpeer'] = $_POST['logpeer'];
@@ -193,6 +205,16 @@ if ($_POST) {
 
 		if (is_uploaded_file($_FILES['leapfile']['tmp_name'])) {
 			$config['ntpd']['leapsec'] = base64_encode(file_get_contents($_FILES['leapfile']['tmp_name']));
+		}
+
+		if (!empty($_POST['serverauth'])) {
+			$config['ntpd']['serverauth'] = $_POST['serverauth'];
+			$config['ntpd']['serverauthkey'] = base64_encode(trim($_POST['serverauthkey']));
+			$config['ntpd']['serverauthalgo'] = $_POST['serverauthalgo'];
+		} elseif (isset($config['ntpd']['serverauth'])) {
+			unset($config['ntpd']['serverauth']);
+			unset($config['ntpd']['serverauthkey']);
+			unset($config['ntpd']['serverauthalgo']);
 		}
 
 		write_config("Updated NTP Server Settings");
@@ -265,7 +287,7 @@ $section->addInput(new Form_Checkbox(
 	'Enable',
 	'Enable NTP Server',
 	($pconfig['enable'] == 'enabled')
-))->setHelp('You may need to disable NTP if pfSense is running in a virtual machine and the host is responsible for the clock.');
+))->setHelp('You may need to disable NTP if %1$s is running in a virtual machine and the host is responsible for the clock.', $g['product_label']);
 
 $iflist = build_interface_list();
 
@@ -487,6 +509,48 @@ $section->addInput(new Form_Input(
 	'file'
 ))->addClass('btn-default');
 
+$section->addInput(new Form_Select(
+	'dnsresolv',
+	'DNS Resolution',
+	$pconfig['dnsresolv'],
+	array(
+		'auto' => 'Auto',
+		'inet' => 'IPv4',
+		'inet6' => 'IPv6',
+	)
+))->setHelp('Force NTP peers DNS resolution IP protocol. Do not affect pools.');
+
+$section->addInput(new Form_Checkbox(
+	'serverauth',
+	'Enable NTP Server Authentication',
+	'Enable NTPv3 authentication (RFC 1305)',
+	$pconfig['serverauth']
+))->setHelp('Authentication allows the NTP client to confirm it is communicating with the intended server, ' .
+	    'which protects against man-in-the-middle attacks.');
+
+$group = new Form_Group('Authentication key');
+$group->addClass('ntpserverauth');
+
+$group->add(new Form_IpAddress(
+	'serverauthkey',
+	'NTP Authentication key',
+	base64_decode($pconfig['serverauthkey']),
+	['placeholder' => 'NTP Authentication key']
+))->setHelp(
+	'Key format: %1$s MD5 - The key is 1 to 16 printable characters %1$s' .
+	'SHA1 - The key is a hex-encoded ASCII string of 40 characters',
+	'<br />'
+);
+
+$group->add(new Form_Select(
+	'serverauthalgo',
+	null,
+	$pconfig['serverauthalgo'],
+	$ntp_auth_halgos
+))->setWidth(3)->setHelp('Digest algorithm');
+
+$section->add($group);
+
 $form->add($section);
 
 print($form);
@@ -573,13 +637,22 @@ events.push(function() {
 		$('#btnadvleap').html('<i class="fa fa-cog"></i> ' + text);
 	}
 
+	function change_serverauth() {
+		hideClass('ntpserverauth', !($('#serverauth').prop('checked')));
+	}
+
 	$('#btnadvleap').click(function(event) {
 		show_advleap();
+	});
+
+	$('#serverauth').change(function () {
+		change_serverauth();
 	});
 
 	// Set initial states
 	show_advstats(true);
 	show_advleap(true);
+	change_serverauth();
 
 	// Suppress "Delete row" button if there are fewer than two rows
 	checkLastRow();

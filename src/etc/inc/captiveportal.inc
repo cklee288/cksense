@@ -142,7 +142,7 @@ EOD;
 			$translated_text = gettext("Voucher Code");
 			$htmltext .= <<<EOD
 				<br  /><br  />
-				<input name="auth_voucher" type="text" placeholder="{$translated_text}">
+				<input name="auth_voucher" type="text" placeholder="{$translated_text}" value="#VOUCHER#">
 EOD;
 		}
 	}
@@ -1160,8 +1160,8 @@ function captiveportal_disconnect($dbent, $term_cause = 1, $stop_time = null, $c
 			    IP_FW_TABLE_XDEL, "{$dbent[2]}/{$clientsn}");
 		}
 		/* XXX: Redundant?! Ensure all pf(4) states are killed. */
-		$_gb = @pfSense_kill_states($dbent[2]);
-		$_gb = @pfSense_kill_srcstates($dbent[2]);
+		$_gb = @pfSense_kill_states(utf8_encode($dbent[2]));
+		$_gb = @pfSense_kill_srcstates(utf8_encode($dbent[2]));
 	}
 
 	/*
@@ -1443,15 +1443,15 @@ function captiveportal_allowedip_configure_entry($ipent, $ishostname = false) {
 	 */
 	if ($ishostname === true) {
 		if (!platform_booting()) {
-			$ipaddress = gethostbyname($ipent['hostname']);
-			if (!is_ipaddr($ipaddress)) {
+			$ipaddress = resolve_host_addresses($ipent['hostname'], array(DNS_A), false);
+			if (empty($ipaddress)) {
 				return;
 			}
 		} else {
-			$ipaddress = "";
+			$ipaddress = array();
 		}
 	} else {
-		$ipaddress = $ipent['ip'];
+		$ipaddress = array($ipent['ip']);
 	}
 
 	$rules = "";
@@ -1479,7 +1479,7 @@ function captiveportal_allowedip_configure_entry($ipent, $ishostname = false) {
 	if ($ishostname === true) {
 		$cp_filterdns_conf .= "ipfw {$ipent['hostname']} {$cpzone}_allowed_up pipe {$pipeup}\n";
 		$cp_filterdns_conf .= "ipfw {$ipent['hostname']} {$cpzone}_allowed_down pipe {$pipedown}\n";
-		if (!is_ipaddr($ipaddress)) {
+		if (!is_ipaddr($ipaddress[0])) {
 			return array("", $cp_filterdns_conf);
 		}
 	}
@@ -1488,8 +1488,10 @@ function captiveportal_allowedip_configure_entry($ipent, $ishostname = false) {
 	if (!empty($ipent['sn'])) {
 		$subnet = "/{$ipent['sn']}";
 	}
-	$rules .= "table {$cpzone}_allowed_up add {$ipaddress}{$subnet} {$pipeup}\n";
-	$rules .= "table {$cpzone}_allowed_down add {$ipaddress}{$subnet} {$pipedown}\n";
+	foreach ($ipaddress as $ip) {
+		$rules .= "table {$cpzone}_allowed_up add {$ip}{$subnet} {$pipeup}\n";
+		$rules .= "table {$cpzone}_allowed_down add {$ip}{$subnet} {$pipedown}\n";
+	}
 
 	if ($ishostname === true) {
 		return array($rules, $cp_filterdns_conf);
@@ -2189,11 +2191,15 @@ function portal_ip_from_client_ip($cliip) {
 		}
 	}
 
-	$inet = ($isipv6) ? '-inet6' : '-inet';
-	$iface = exec_command("/sbin/route -n get {$inet} {$cliip} | /usr/bin/awk '/interface/ { print \$2; };'");
-	$iface = trim($iface, "\n");
+	$route = route_get($cliip);
+	if (empty($route)) {
+		return false;
+	}
+
+	$iface = $route[0]['interface-name'];
 	if (!empty($iface)) {
-		$ip = ($isipv6) ? find_interface_ipv6($iface) : find_interface_ip($iface);
+		$ip = ($isipv6) ? find_interface_ipv6($iface)
+		    : find_interface_ip($iface);
 		if (is_ipaddr($ip)) {
 			return $ip;
 		}
@@ -2244,7 +2250,7 @@ function portal_hostname_from_client_ip($cliip) {
 
 /* functions move from index.php */
 
-function portal_reply_page($redirurl, $type = null, $message = null, $clientmac = null, $clientip = null, $username = null, $password = null) {
+function portal_reply_page($redirurl, $type = null, $message = null, $clientmac = null, $clientip = null, $username = null, $password = null, $voucher = null) {
 	global $g, $config, $cpzone;
 
 	/* Get captive portal layout */
@@ -2287,6 +2293,7 @@ function portal_reply_page($redirurl, $type = null, $message = null, $clientmac 
 	$htmltext = str_replace("#CLIENT_IP#", htmlspecialchars($clientip), $htmltext);
 	$htmltext = str_replace("#USERNAME#", htmlspecialchars($username), $htmltext);
 	$htmltext = str_replace("#PASSWORD#", htmlspecialchars($password), $htmltext);
+	$htmltext = str_replace("#VOUCHER#", htmlspecialchars($voucher), $htmltext);
 
 	echo $htmltext;
 }
@@ -2355,7 +2362,7 @@ function portal_allow($clientip, $clientmac, $username, $password = null, $redir
 	$writecfg = false;
 	/* If both "Add MAC addresses of connected users as pass-through MAC" and "Disable concurrent logins" are checked,
 	then we need to check if the user was already authenticated using another MAC Address, and if so remove the previous Pass-Through MAC. */
-	if ((isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) && ($username != 'unauthenticated') && isset($config['captiveportal'][$cpzone]['passthrumacadd'])) {
+	if ((isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) && ($config['captiveportal'][$cpzone]['noconcurrentlogins'] == 'last') && ($username != 'unauthenticated') && isset($config['captiveportal'][$cpzone]['passthrumacadd'])) {
 		$mac = captiveportal_passthrumac_findbyname($username);
 		if (!empty($mac)) {
 			foreach ($config['captiveportal'][$cpzone]['passthrumac'] as $idx => $macent) {
@@ -2368,7 +2375,7 @@ function portal_allow($clientip, $clientmac, $username, $password = null, $redir
 					captiveportal_free_dn_ruleno($pipeno);
 					@pfSense_ipfw_table("{$cpzone}_pipe_mac", IP_FW_TABLE_XDEL, "any,{$mac['mac']}");
 					@pfSense_ipfw_table("{$cpzone}_pipe_mac", IP_FW_TABLE_XDEL, "{$mac['mac']},any");
-					@pfSense_ipfw_pipe("pipe delete " . $pipeno+1);
+					@pfSense_ipfw_pipe("pipe delete " . ($pipeno+1));
 					@pfSense_ipfw_pipe("pipe delete " . $pipeno);
 				}
 				unset($config['captiveportal'][$cpzone]['passthrumac'][$idx]);
@@ -2412,19 +2419,59 @@ function portal_allow($clientip, $clientmac, $username, $password = null, $redir
 				$remaining_time = 0;
 			}
 
-			/* This user was already logged in so we disconnect the old one */
-			captiveportal_disconnect($cpentry, 13);
-			captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT LOGIN - TERMINATING OLD SESSION");
-			$unsetindexes[] = $cpentry[5];
-			break;
-		} elseif ((isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) && ($username != 'unauthenticated')) {
-			/* on the same username */
-			if (strcasecmp($cpentry[4], $username) == 0) {
-				/* This user was already logged in so we disconnect the old one */
+			/* This user was already logged in so we disconnect the old one, or 
+			keep the old one, refusing the new login, or
+			allow the login */
+
+			if (!isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) {
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "config['captiveportal'][$cpzone]['noconcurrentlogins'] 2 does not exists = NOT set");		
+			} else {
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "config['captiveportal'][$cpzone]['noconcurrentlogins'] 2 exists = set");		
+			}
+
+			if ($config['captiveportal'][$cpzone]['noconcurrentlogins'] == "last") {
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "Found last");
+			} else {
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "Found NOT last");
+			}
+				
+			if (!isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) {
+				/* 'noconcurrentlogins' not set : accept login 'username' creating multiple sessions. */
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "config['captiveportal'][$cpzone]['noconcurrentlogins'] 3 does not exists = NOT set");
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT LOGIN - NOT TERMINATING EXISTING SESSION(S)");			
+			} elseif ($config['captiveportal'][$cpzone]['noconcurrentlogins'] == "last") {
+				/* Classic situation : accept the new login, disconnect the old - present - connection */
+				if (isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) {
+					captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "config['captiveportal'][$cpzone]['noconcurrentlogins'] 4 exists = set");		
+				} else {
+					captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "config['captiveportal'][$cpzone]['noconcurrentlogins'] 4 does not exists = NOT set");		
+				}
+				
 				captiveportal_disconnect($cpentry, 13);
 				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT LOGIN - TERMINATING OLD SESSION");
 				$unsetindexes[] = $cpentry[5];
 				break;
+			} else {
+				/* Implicit 'first' : refuse the new login - 'username' is already logged in */
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT VOUCHER LOGIN - NOT ALLOWED KEEPING OLD SESSION ");
+				unlock($cpdblck);
+				return 2;
+			}
+		} elseif ((isset($config['captiveportal'][$cpzone]['noconcurrentlogins'])) && ($username != 'unauthenticated')) {
+			if ($config['captiveportal'][$cpzone]['noconcurrentlogins'] == "last") {
+				/* on the same username */
+				if (strcasecmp($cpentry[4], $username) == 0) {
+					/* This user was already logged in so we disconnect the old one */
+					captiveportal_disconnect($cpentry, 13);
+					captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT USER LOGIN - TERMINATING OLD SESSION");
+					$unsetindexes[] = $cpentry[5];
+					break;
+				}
+			} else {
+				/* Implicit 'first' : refuse the new login - 'username' is already logged in */
+				captiveportal_logportalauth($cpentry[4], $cpentry[3], $cpentry[2], "CONCURRENT USER LOGIN - NOT ALLOWED KEEPING OLD SESSION ");
+				unlock($cpdblck);
+				return 2;				
 			}
 		}
 	}
@@ -2687,6 +2734,7 @@ function portal_consume_passthrough_credit($clientmac) {
 						unset($usedmacs[$key]);
 						$usedmacs[] = implode(",", $usedmac);
 						captiveportal_write_usedmacs_db($usedmacs);
+						xmlrpc_sync_usedmacs($usedmacs);
 					}
 
 					return false;
@@ -2712,7 +2760,31 @@ function portal_consume_passthrough_credit($clientmac) {
 	}
 
 	captiveportal_write_usedmacs_db($usedmacs);
+	xmlrpc_sync_usedmacs($usedmacs);
 	return true;
+}
+
+function xmlrpc_sync_usedmacs($usedmacs) { 
+	global $config, $cpzone;
+
+	// XMLRPC Call over to the other node
+	if (captiveportal_xmlrpc_sync_get_details($syncip, $syncport,
+	    $syncuser, $syncpass, $carp_loop)) {
+		$rpc_client = new pfsense_xmlrpc_client();
+		$rpc_client->setConnectionData($syncip, $syncport, $syncuser, $syncpass);
+		$rpc_client->set_noticefile("CaptivePortalUsedmacsSync");
+		$arguments = array(
+			'usedmacs' => $usedmacs
+		);
+
+		$rpc_client->xmlrpc_method('captive_portal_sync',
+			array(
+				'op' => 'write_usedmacs',
+				'zone' => $cpzone,
+				'arguments' => base64_encode(serialize($arguments))
+			)
+		);
+	}
 }
 
 function captiveportal_read_usedmacs_db() {

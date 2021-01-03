@@ -57,14 +57,18 @@ if (!isset($config['system']['webgui']['dashboardcolumns'])) {
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 
-	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+	<link rel="apple-touch-icon-precomposed" href="/apple-touch/apple-touch-icon-iphone-60x60-precomposed.png">
+	<link rel="apple-touch-icon-precomposed" sizes="60x60" href="/apple-touch/apple-touch-icon-ipad-76x76-precomposed.png">
+	<link rel="apple-touch-icon-precomposed" sizes="114x114" href="/apple-touch/apple-touch-icon-iphone-retina-120x120-precomposed.png">
+	<link rel="apple-touch-icon-precomposed" sizes="144x144" href="/apple-touch/apple-touch-icon-ipad-retina-152x152-precomposed.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
 	<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
 	<link rel="manifest" href="/manifest.json">
 	<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#5bbad5">
 	<meta name="theme-color" content="#ffffff">
 
-	<link rel="stylesheet" href="/vendor/font-awesome/css/font-awesome.min.css?v=<?=filemtime('/usr/local/www/vendor/font-awesome/css/font-awesome.min.css')?>">
+	<link rel="stylesheet" href="/vendor/font-awesome/css/all.min.css?v=<?=filemtime('/usr/local/www/vendor/font-awesome/css/all.min.css')?>">
+	<link rel="stylesheet" href="/vendor/font-awesome/css/v4-shims.css?v=<?=filemtime('/usr/local/www/vendor/font-awesome/css/v4-shims.css')?>">
 	<link rel="stylesheet" href="/vendor/sortable/sortable-theme-bootstrap.css?v=<?=filemtime('/usr/local/www/vendor/sortable/sortable-theme-bootstrap.css')?>">
 	<link rel="stylesheet" href="<?=$cssfile?>?v=<?=filemtime('/usr/local/www/' . $cssfile)?>" />
 
@@ -685,7 +689,7 @@ if (file_exists('/conf/needs_package_sync') && platform_booting()) {
 	$warning_text = sprintf(gettext(
 	    '%1$s%3$s is booting, then packages will be reinstalled in the ' .
 	    'background.%2$s%1$sDo not make changes in the GUI until this is ' .
-	    'complete.%2$s'), '<p>', '</p>', $g['product_name']);
+	    'complete.%2$s'), '<p>', '</p>', $g['product_label']);
 } elseif (is_subsystem_dirty('packagelock')) {
 	$pgtitle = array(gettext("System"), gettext("Package Manager"));
 	$warning_text = sprintf(gettext('%1$sPackages are currently being ' .

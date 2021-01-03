@@ -27,11 +27,32 @@ require_once("notices.inc");
 // If there is no ssh key in the system to identify this firewall, generate a pair now
 function get_device_key() {
 	if (!file_exists("/etc/ssh/ssh_host_ed25519_key.pub")) {
-		exec("/usr/bin/nice -n20 /usr/bin/ssh-keygen -t ed25519 -b 4096 -N '' -f /etc/ssh//ssh_host_ed25519_key");
+		// Remove any possible matching key so we don't get an overwrite prompt
+		if (file_exists('/etc/ssh/ssh_host_ed25519_key')) {
+			unlink('/etc/ssh/ssh_host_ed25519_key');
+		}
+
+		// Generate a new key pair
+		exec("/usr/bin/nice -n20 /usr/bin/ssh-keygen -t ed25519 -b 4096 -N '' -f /etc/ssh/ssh_host_ed25519_key");
+		sleep(2);
+
+		$cnt = 0;
+		while(!file_exists("/etc/ssh/ssh_host_ed25519_key.pub")) {
+			sleep(2);
+			if (++$cnt > 10) {
+				return "";
+			}
+		}
 	}
 
-	// The userkey (firewall identifier) is an sha256 hash of the ed25519 public key
-	return hash("sha256", file_get_contents("/etc/ssh/ssh_host_ed25519_key.pub"));
+	$pkey =  file_get_contents("/etc/ssh/ssh_host_ed25519_key.pub");
+
+	// Check that the key looks reasonable
+	if (substr($pkey, 0, 3) != "ssh") {
+		return "";
+	}
+
+	return hash("sha256", $pkey);
 }
 
 $origkey = get_device_key();
@@ -160,7 +181,7 @@ function test_connection($post) {
 	curl_setopt($curl_session, CURLOPT_RETURNTRANSFER, 1);
 	curl_setopt($curl_session, CURLOPT_CONNECTTIMEOUT, 55);
 	curl_setopt($curl_session, CURLOPT_TIMEOUT, 30);
-	curl_setopt($curl_session, CURLOPT_USERAGENT, $g['product_name'] . '/' . rtrim(file_get_contents("/etc/version")));
+	curl_setopt($curl_session, CURLOPT_USERAGENT, $g['product_label'] . '/' . rtrim(file_get_contents("/etc/version")));
 	// Proxy
 	curl_setopt_array($curl_session, configure_proxy());
 
@@ -273,7 +294,7 @@ function upload_config($manual = false) {
 			curl_setopt($curl_session, CURLOPT_SSL_VERIFYPEER, 1);
 			curl_setopt($curl_session, CURLOPT_CONNECTTIMEOUT, 55);
 			curl_setopt($curl_session, CURLOPT_TIMEOUT, 30);
-			curl_setopt($curl_session, CURLOPT_USERAGENT, $g['product_name'] . '/' . rtrim(file_get_contents("/etc/version")));
+			curl_setopt($curl_session, CURLOPT_USERAGENT, $g['product_label'] . '/' . rtrim(file_get_contents("/etc/version")));
 			// Proxy
 			curl_setopt_array($curl_session, configure_proxy());
 
@@ -292,7 +313,9 @@ function upload_config($manual = false) {
 			}
 
 			if (strpos($data, "500") != false) {
-				$notice_text = gettext("An error occurred while uploading your pfSense configuration to ") . $upload_url . " (" . htmlspecialchars($data) . ")";
+				$notice_text = sprintf(gettext(
+				    "An error occurred while uploading your %s configuration to "), $g['product_label']) .
+				    $upload_url . " (" . htmlspecialchars($data) . ")";
 				log_error($notice_text . " - " . $data);
 				file_notice("AutoConfigBackup", $notice_text);
 				update_filter_reload_status($notice_text);
@@ -312,4 +335,59 @@ function upload_config($manual = false) {
 			//log_error("No https://acb.netgate.com backup required.");
 		}
 	}
+}
+
+// Save the updated ACB configuration
+// Create a crontab entry for scheduled backups
+// if frequency == "cron", a new crontab entry is created, otherwise any existing
+// ACB entry is removed
+function setup_ACB($enable, $hint, $frequency, $hours, $month, $day, $dow, $numman, $pwd) {
+	global $config;
+
+	$config['system']['acb']['enable'] = $enable;
+	$config['system']['acb']['hint'] = $hint;
+	$config['system']['acb']['frequency'] = $frequency;
+	$config['system']['acb']['hour'] = $hours;
+	$config['system']['acb']['month'] = $month;
+	$config['system']['acb']['day'] = $day;
+	$config['system']['acb']['dow'] = $dow;
+	$config['system']['acb']['numman'] = $numman;
+	if (strlen($pwd) >= 8) {
+		$config['system']['acb']['encryption_password'] = $pwd;
+	}
+
+
+	init_config_arr(array('cron'));
+	$a_cron = &$config['cron']['item'];
+	$croncmd = "/usr/bin/nice -n20 /usr/local/bin/php /usr/local/sbin/execacb.php";
+
+	$i = 0;
+
+	// Remove the existing cron job
+	if (count($a_cron) > 0) {
+		foreach ($a_cron as $ent) {
+			if ($ent['command'] === $croncmd) {
+				unset($a_cron[$i]);
+				break;
+			}
+
+		$i++;
+		}
+	}
+
+	if ($frequency == "cron") {
+		$crondef = array();
+		$crondef['minute'] = '0';
+		$crondef['hour'] = $hours;
+		$crondef['mday'] = $day;
+		$crondef['month'] = $month;
+		$crondef['wday'] = $dow;
+		$crondef['who'] = 'root';
+		$crondef['command'] = $croncmd;
+
+		$a_cron[$i] = $crondef;
+	}
+
+	write_config("AutoConfigBackup settings updated");
+	configure_cron();
 }

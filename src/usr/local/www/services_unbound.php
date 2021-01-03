@@ -71,7 +71,7 @@ if (isset($a_unboundcfg['regovpnclients'])) {
 $pconfig['python_order'] = $a_unboundcfg['python_order'];
 $pconfig['python_script'] = $a_unboundcfg['python_script'];
 $pconfig['port'] = $a_unboundcfg['port'];
-$pconfig['sslport'] = $a_unboundcfg['sslport'];
+$pconfig['tlsport'] = $a_unboundcfg['tlsport'];
 $pconfig['sslcertref'] = $a_unboundcfg['sslcertref'];
 $pconfig['custom_options'] = base64_decode($a_unboundcfg['custom_options']);
 
@@ -132,21 +132,9 @@ if ($_POST['save']) {
 	// forwarding mode requires having valid DNS servers
 	if (isset($pconfig['forwarding'])) {
 		$founddns = false;
-		if (isset($config['system']['dnsallowoverride'])) {
-			$dns_servers = get_dns_servers();
-			if (is_array($dns_servers)) {
-				foreach ($dns_servers as $dns_server) {
-					if (!ip_in_subnet($dns_server, "127.0.0.0/8")) {
-						$founddns = true;
-					}
-				}
-			}
-		}
-		if (is_array($config['system']['dnsserver'])) {
-			foreach ($config['system']['dnsserver'] as $dnsserver) {
-				if (is_ipaddr($dnsserver)) {
-					$founddns = true;
-				}
+		foreach (get_dns_nameservers(false, true) as $dns_server) {
+			if (!ip_in_subnet($dns_server, "127.0.0.0/8")) {
+				$founddns = true;
 			}
 		}
 		if ($founddns == false) {
@@ -156,7 +144,7 @@ if ($_POST['save']) {
 
 	if (empty($pconfig['active_interface'])) {
 		$input_errors[] = gettext("One or more Network Interfaces must be selected for binding.");
-	} else if (!isset($config['system']['dnslocalhost']) && (!in_array("lo0", $pconfig['active_interface']) && !in_array("all", $pconfig['active_interface']))) {
+	} elseif (($config['system']['dnslocalhost'] != 'remote') && (!in_array("lo0", $pconfig['active_interface']) && !in_array("all", $pconfig['active_interface']))) {
 		$input_errors[] = gettext("This system is configured to use the DNS Resolver as its DNS server, so Localhost or All must be selected in Network Interfaces.");
 	}
 
@@ -167,7 +155,7 @@ if ($_POST['save']) {
 	if ($pconfig['port'] && !is_port($pconfig['port'])) {
 		$input_errors[] = gettext("A valid port number must be specified.");
 	}
-	if ($pconfig['sslport'] && !is_port($pconfig['sslport'])) {
+	if ($pconfig['tlsport'] && !is_port($pconfig['tlsport'])) {
 		$input_errors[] = gettext("A valid SSL/TLS port number must be specified.");
 	}
 
@@ -202,7 +190,7 @@ if ($_POST['save']) {
 		$a_unboundcfg['enable'] = isset($pconfig['enable']);
 		$a_unboundcfg['enablessl'] = isset($pconfig['enablessl']);
 		$a_unboundcfg['port'] = $pconfig['port'];
-		$a_unboundcfg['sslport'] = $pconfig['sslport'];
+		$a_unboundcfg['tlsport'] = $pconfig['tlsport'];
 		$a_unboundcfg['sslcertref'] = $pconfig['sslcertref'];
 		$a_unboundcfg['dnssec'] = isset($pconfig['dnssec']);
 
@@ -354,10 +342,10 @@ if ($certs_available) {
 }
 
 $section->addInput(new Form_Input(
-	'sslport',
+	'tlsport',
 	'SSL/TLS Listen Port',
 	'number',
-	$pconfig['sslport'],
+	$pconfig['tlsport'],
 	['placeholder' => '853']
 ))->setHelp('The port used for responding to SSL/TLS DNS queries. It should normally be left blank unless another service needs to bind to TCP/UDP port 853.');
 
@@ -387,7 +375,7 @@ $section->addInput(new Form_Select(
 	'*System Domain Local Zone Type',
 	$pconfig['system_domain_local_zone_type'],
 	unbound_local_zone_types()
-))->setHelp('The local-zone type used for the pfSense system domain (System | General Setup | Domain).  Transparent is the default.  Local-Zone type descriptions are available in the unbound.conf(5) manual pages.');
+))->setHelp('The local-zone type used for the %1$s system domain (System | General Setup | Domain).  Transparent is the default.  Local-Zone type descriptions are available in the unbound.conf(5) manual pages.', $g['product_label']);
 
 $section->addInput(new Form_Checkbox(
 	'dnssec',
@@ -452,6 +440,7 @@ $section->addInput(new Form_Checkbox(
 	$pconfig['regdhcp']
 ))->setHelp('If this option is set, then machines that specify their hostname when requesting an IPv4 DHCP lease will be registered'.
 					' in the DNS Resolver so that their name can be resolved.'.
+	    				' Note that this will cause the Resolver to reload and flush its resolution cache whenever a DHCP lease is issued.'.
 					' The domain in %1$sSystem &gt; General Setup%2$s should also be set to the proper value.','<a href="system.php">','</a>');
 
 $section->addInput(new Form_Checkbox(
@@ -467,8 +456,11 @@ $section->addInput(new Form_Checkbox(
 	'OpenVPN Clients',
 	'Register connected OpenVPN clients in the DNS Resolver',
 	$pconfig['regovpnclients']
-))->setHelp(sprintf('If this option is set, then the common name (CN) of connected OpenVPN clients will be registered in the DNS Resolver, so that their name can be resolved. This only works for OpenVPN servers (Remote Access SSL/TLS) operating in "tun" mode. '.
-					'The domain in %sSystem: General Setup%s should also be set to the proper value.','<a href="system.php">','</a>'));
+))->setHelp(sprintf('If this option is set, then the common name (CN) of connected OpenVPN clients will be ' .
+	    'registered in the DNS Resolver, so that their name can be resolved. This only works for OpenVPN ' .
+	    'servers (Remote Access SSL/TLS or User Auth with Username as Common Name option) operating ' .
+	    'in "tun" mode. The domain in %sSystem: General Setup%s should also be set to the proper value.',
+	    '<a href="system.php">','</a>'));
 
 $btnadv = new Form_Button(
 	'btnadvcustom',
@@ -643,7 +635,7 @@ endforeach;
 <span class="help-block">
 	Enter any individual hosts for which the resolver's standard DNS lookup process should be overridden and a specific
 	IPv4 or IPv6 address should automatically be returned by the resolver. Standard and also non-standard names and parent domains
-	can be entered, such as 'test', 'mycompany.localdomain', '1.168.192.in-addr.arpa', or 'somesite.com'. Any lookup attempt for
+	can be entered, such as 'test', 'nas.home.arpa', 'mycompany.localdomain', '1.168.192.in-addr.arpa', or 'somesite.com'. Any lookup attempt for
 	the host will automatically return the given IP address, and the usual lookup server for the domain will not be queried for
 	the host's records.
 </span>
@@ -700,8 +692,10 @@ endforeach;
 <span class="help-block">
 	Enter any domains for which the resolver's standard DNS lookup process should be overridden and a different (non-standard)
 	lookup server should be queried instead. Non-standard, 'invalid' and local domains, and subdomains, can also be entered,
-	such as 'test', 'mycompany.localdomain', '1.168.192.in-addr.arpa', or 'somesite.com'. The IP address is treated as the
+	such as 'test', 'nas.home.arpa', 'mycompany.localdomain', '1.168.192.in-addr.arpa', or 'somesite.com'. The IP address is treated as the
 	authoritative lookup server for the domain (including all of its subdomains), and other lookup servers will not be queried.
+	If there are multiple authoritative DNS servers available for a domain then make a separate entry for each, 
+	using the same domain name.
 </span>
 
 <nav class="action-buttons">

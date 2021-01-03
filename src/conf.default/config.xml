@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <pfsense>
-	<version>20.6</version>
+	<version>20.8</version>
 	<lastchange/>
 	<system>
 		<optimization>normal</optimization>
 		<hostname>pfSense</hostname>
-		<domain>localdomain</domain>
+		<domain>home.arpa</domain>
 		<dnsserver/>
 		<dnsallowoverride/>
 		<group>

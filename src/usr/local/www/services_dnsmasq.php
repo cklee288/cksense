@@ -176,7 +176,7 @@ if ($_POST['save']) {
 	}
 
 	if (!$input_errors) {
-		write_config();
+		write_config("DNS Forwarder settings saved");
 		mark_subsystem_dirty('hosts');
 	}
 }
@@ -186,7 +186,7 @@ if ($_POST['act'] == "del") {
 	if ($_POST['type'] == 'host') {
 		if ($a_hosts[$_POST['id']]) {
 			unset($a_hosts[$_POST['id']]);
-			write_config();
+			write_config("DNS Forwarder host override deleted");
 			mark_subsystem_dirty('hosts');
 			header("Location: services_dnsmasq.php");
 			exit;
@@ -194,7 +194,7 @@ if ($_POST['act'] == "del") {
 	} elseif ($_POST['type'] == 'doverride') {
 		if ($a_domainOverrides[$_POST['id']]) {
 			unset($a_domainOverrides[$_POST['id']]);
-			write_config();
+			write_config("DNS Forwarder domain override deleted");
 			mark_subsystem_dirty('hosts');
 			header("Location: services_dnsmasq.php");
 			exit;
@@ -295,7 +295,7 @@ $group->add(new Form_Checkbox(
 	$pconfig['strict_order']
 ))->setHelp('If this option is set %1$s DNS Forwarder (dnsmasq) will '.
 					'query the DNS servers sequentially in the order specified (%2$sSystem - General Setup - DNS Servers%3$s), '.
-					'rather than all at once in parallel. ', $g['product_name'], '<i>', '</i>');
+					'rather than all at once in parallel. ', $g['product_label'], '<i>', '</i>');
 
 $group->add(new Form_Checkbox(
 	'domain_needed',
@@ -304,7 +304,7 @@ $group->add(new Form_Checkbox(
 	$pconfig['domain_needed']
 ))->setHelp("If this option is set %s DNS Forwarder (dnsmasq) will ".
 					"not forward A or AAAA queries for plain names, without dots or domain parts, to upstream name servers.	 ".
-					"If the name is not known from /etc/hosts or DHCP then a \"not found\" answer is returned. ", $g['product_name']);
+					"If the name is not known from /etc/hosts or DHCP then a \"not found\" answer is returned. ", $g['product_label']);
 
 $group->add(new Form_Checkbox(
 	'no_private_reverse',
@@ -314,7 +314,7 @@ $group->add(new Form_Checkbox(
 ))->setHelp("If this option is set %s DNS Forwarder (dnsmasq) will ".
 					"not forward reverse DNS lookups (PTR) for private addresses (RFC 1918) to upstream name servers.  ".
 					"Any entries in the Domain Overrides section forwarding private \"n.n.n.in-addr.arpa\" names to a specific server are still forwarded. ".
-					"If the IP to name is not known from /etc/hosts, DHCP or a specific domain override then a \"not found\" answer is immediately returned. ", $g['product_name']);
+					"If the IP to name is not known from /etc/hosts, DHCP or a specific domain override then a \"not found\" answer is immediately returned. ", $g['product_label']);
 
 $section->add($group);
 

@@ -278,6 +278,8 @@ switch ($wancfg['ipaddr']) {
 			$pconfig['ipaddr'] = $wancfg['ipaddr'];
 			$pconfig['subnet'] = $wancfg['subnet'];
 			$pconfig['gateway'] = $wancfg['gateway'];
+		} elseif (in_array(remove_ifindex($wancfg['if']), array("ppp", "pppoe", "pptp", "l2tp"))) {
+			$pconfig['type'] = remove_ifindex($wancfg['if']);
 		} else {
 			$pconfig['type'] = "none";
 		}
@@ -358,6 +360,8 @@ if (isset($wancfg['wireless'])) {
 	$wlanbaseif = interface_get_wireless_base($wancfg['if']);
 	preg_match("/^(.*?)([0-9]*)$/", $wlanbaseif, $wlanbaseif_split);
 	$wl_modes = get_wireless_modes($if);
+	$wl_ht_modes = get_wireless_ht_modes($if);
+	$wl_ht_list = get_wireless_ht_list($if);
 	$wl_chaninfo = get_wireless_channel_info($if);
 	$wl_sysctl_prefix = 'dev.' . $wlanbaseif_split[1] . '.' . $wlanbaseif_split[2];
 	$wl_sysctl = get_sysctl(
@@ -380,6 +384,7 @@ if (isset($wancfg['wireless'])) {
 	$pconfig['protmode'] = $wancfg['wireless']['protmode'];
 	$pconfig['ssid'] = $wancfg['wireless']['ssid'];
 	$pconfig['channel'] = $wancfg['wireless']['channel'];
+	$pconfig['channel_width'] = $wancfg['wireless']['channel_width'];
 	$pconfig['txpower'] = $wancfg['wireless']['txpower'];
 	$pconfig['diversity'] = $wancfg['wireless']['diversity'];
 	$pconfig['txantenna'] = $wancfg['wireless']['txantenna'];
@@ -437,10 +442,11 @@ if ($_POST['apply']) {
 		unlink_if_exists("{$g['tmp_path']}/config.cache");
 		clear_subsystem_dirty('interfaces');
 
-		$vlan_redo = false;
+		$vlan_redo = array();
 		if (file_exists("{$g['tmp_path']}/.interfaces.apply")) {
 			$toapplylist = unserialize(file_get_contents("{$g['tmp_path']}/.interfaces.apply"));
 			foreach ($toapplylist as $ifapply => $ifcfgo) {
+				$ifmtu = get_interface_mtu(get_real_interface($ifapply));
 				if (isset($config['interfaces'][$ifapply]['enable'])) {
 					interface_bring_down($ifapply, false, $ifcfgo);
 					interface_configure($ifapply, true);
@@ -460,18 +466,24 @@ if ($_POST['apply']) {
 						services_dhcpd_configure();
 					}
 				}
-				if (interface_has_clones(get_real_interface($ifapply))) {
-					$vlan_redo = true;
+				if (interface_has_clones(get_real_interface($ifapply)) &&
+				    (isset($config['interfaces'][$ifapply]['mtu']) &&
+				    ($config['interfaces'][$ifapply]['mtu'] != $ifmtu)) ||
+				    (!isset($config['interfaces'][$ifapply]['mtu']) &&
+				    (get_interface_default_mtu() != $ifmtu))) { 
+					$vlan_redo[] = get_real_interface($ifapply);
 				}
 			}
 		}
 
 		/*
-		 * If the parent interface has changed above, the VLANs needs to be
-		 * redone.
+                 * If the parent interface has changed MTU above, the VLANs needs to be
+                 * redone.
 		 */
-		if ($vlan_redo) {
-			interfaces_vlan_configure();
+		if (!empty($vlan_redo)) {
+			foreach ($vlan_redo as $vlredo) {
+				interfaces_vlan_configure_mtu($vlredo);
+			}
 		}
 
 		/* restart snmp so that it binds to correct address */
@@ -490,6 +502,11 @@ if ($_POST['apply']) {
 
 		if (is_subsystem_dirty('staticroutes') && (system_routing_configure() == 0)) {
 			clear_subsystem_dirty('staticroutes');
+		}
+
+		init_config_arr(array('syslog'));
+		if (isset($config['syslog']['enable']) && ($ifapply == $config['syslog']['sourceip'])) {
+			system_syslogd_start();
 		}
 	}
 	@unlink("{$g['tmp_path']}/.interfaces.apply");
@@ -949,9 +966,18 @@ if ($_POST['apply']) {
 				$input_errors[] = gettext("A specific channel, not auto, must be selected for Access Point mode.");
 			}
 		}
+		if (!stristr($_POST['standard'], '11n') && ($_POST['channel_width'] != "0")) {
+			$input_errors[] = gettext("Channel width selection is only supported by 802.11n standards.");
+		}
 		if (stristr($_POST['standard'], '11n')) {
 			if (!($_POST['wme_enable'])) {
 				$input_errors[] = gettext("802.11n standards require enabling WME.");
+			}
+			if (($_POST['channel_width'] != "0") && ($_POST['channel'] != "0") &&
+			    is_array($wl_ht_list[$_POST['standard']][$_POST['channel']]) &&
+			    !empty($wl_ht_list[$_POST['standard']][$_POST['channel']]) &&
+			    !in_array($_POST['channel_width'], $wl_ht_list[$_POST['standard']][$_POST['channel']])) {
+				$input_errors[] = sprintf(gettext("Unable to use %s channel width with channel %s."), strtoupper($_POST['channel_width']), $_POST['channel']);
 			}
 		}
 		do_input_validation($_POST, $reqdfields, $reqdfieldsn, $input_errors);
@@ -1573,7 +1599,7 @@ if ($_POST['apply']) {
 			handle_wireless_post();
 		}
 
-		write_config();
+		write_config("Interfaces settings changed");
 
 		if ($_POST['gatewayip4']) {
 			save_gateway($gateway_settings4);
@@ -1613,6 +1639,7 @@ function handle_wireless_post() {
 	$wancfg['wireless']['protmode'] = $_POST['protmode'];
 	$wancfg['wireless']['ssid'] = $_POST['ssid'];
 	$wancfg['wireless']['channel'] = $_POST['channel'];
+	$wancfg['wireless']['channel_width'] = $_POST['channel_width'];
 	$wancfg['wireless']['authmode'] = $_POST['authmode'];
 	$wancfg['wireless']['txpower'] = $_POST['txpower'];
 	$wancfg['wireless']['distance'] = $_POST['distance'];
@@ -1806,7 +1833,13 @@ foreach ($mediaopts as $mediaopt) {
 $pgtitle = array(gettext("Interfaces"), "{$wancfg['descr']} ({$realifname})");
 $shortcut_section = "interfaces";
 
-$types4 = array("none" => gettext("None"), "staticv4" => gettext("Static IPv4"), "dhcp" => gettext("DHCP"), "ppp" => gettext("PPP"), "pppoe" => gettext("PPPoE"), "pptp" => gettext("PPTP"), "l2tp" => gettext("L2TP"));
+$types4 = array("ppp" => gettext("PPP"), "pppoe" => gettext("PPPoE"), "pptp" => gettext("PPTP"), "l2tp" => gettext("L2TP"));
+
+if (!in_array($pconfig['type'], array("ppp", "pppoe", "pptp", "l2tp")) ||
+   !array_key_exists($a_ppps[$pppid]['ports'], get_configured_interface_list_by_realif())) { 
+	$types4 = array_merge(array("none" => gettext("None"), "staticv4" => gettext("Static IPv4"), "dhcp" => gettext("DHCP")), $types4);
+}
+
 $types6 = array("none" => gettext("None"), "staticv6" => gettext("Static IPv6"), "dhcp6" => gettext("DHCP6"), "slaac" => gettext("SLAAC"), "6rd" => gettext("6rd Tunnel"), "6to4" => gettext("6to4 Tunnel"), "track6" => gettext("Track Interface"));
 
 // Get the MAC address
@@ -3099,9 +3132,9 @@ if (isset($wancfg['wireless'])) {
 
 			foreach ($wl_channels as $wl_channel) {
 				if (isset($wl_chaninfo[$wl_channel])) {
-					$mode_list[ $wl_channel] = $wl_standard . ' - ' . $wl_channel;
+					$mode_list[$wl_channel] = $wl_standard . ' - ' . $wl_channel;
 				} else {
-					$mode_list[ $wl_channel] = $wl_standard . ' - ' . $wl_channel . ' (' . $wl_chaninfo[$wl_channel][1] . ' @ ' . $wl_chaninfo[$wl_channel][2] . ' / ' . $wl_chaninfo[$wl_channel][3] . ')';
+					$mode_list[$wl_channel] = $wl_standard . ' - ' . $wl_channel . ' (' . $wl_chaninfo[$wl_channel][1] . ' @ ' . $wl_chaninfo[$wl_channel][2] . ' / ' . $wl_chaninfo[$wl_channel][3] . ')';
 				}
 			}
 		}
@@ -3114,6 +3147,13 @@ if (isset($wancfg['wireless'])) {
 		$mode_list
 	))->setHelp('Legend: wireless standards - channel # (frequency @ max TX power / TX power allowed in reg. domain) %1$s' .
 				'Not all channels may be supported by some cards.  Auto may override the wireless standard selected above.', '<br />');
+
+	$section->addInput(new Form_Select(
+		'channel_width',
+		'Channel width',
+		$pconfig['channel_width'],
+		$wl_ht_modes
+	))->setHelp('Channel width for 802.11n mode. Not all cards may support channel width changing.');
 
 	if (ANTENNAS) {
 		if (isset($wl_sysctl["{$wl_sysctl_prefix}.diversity"]) || isset($wl_sysctl["{$wl_sysctl_prefix}.txantenna"]) || isset($wl_sysctl["{$wl_sysctl_prefix}.rxantenna"])) {
@@ -3422,6 +3462,7 @@ $section->addInput(new Form_Checkbox(
 	'yes'
 ))->setHelp('Blocks traffic from reserved IP addresses (but not RFC 1918) or not yet assigned by IANA. Bogons are prefixes that should ' .
 			'never appear in the Internet routing table, and so should not appear as the source address in any packets received.%1$s' .
+			'This option should only be used on external interfaces (WANs), it is not necessary on local interfaces and it can potentially block required local traffic.%1$s' .
 			'Note: The update frequency can be changed under System > Advanced, Firewall & NAT settings.', '<br />');
 
 $form->add($section);

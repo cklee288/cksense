@@ -54,11 +54,29 @@ if (!function_exists('compose_table_body_contents')) {
 			if (in_array($gname, $hiddengateways)) {
 				continue;
 			}
+			if (isset($gateway['inactive'])) {
+				$title = gettext("Gateway inactive, interface is missing");
+				$icon = 'fa-times-circle-o';
+			} elseif (isset($gateway['disabled'])) {
+				$icon = 'fa-ban';
+				$title = gettext("Gateway disabled");
+			} else {
+				$icon = 'fa-check-circle-o';
+				$title = gettext("Gateway enabled");
+			}
+			if (isset($gateway['isdefaultgw'])) {
+				$gtitle = gettext("Default gateway");
+			}
 
 			$gw_displayed = true;
 			$rtnstr .= "<tr>\n";
-			$rtnstr .= 	"<td>\n";
-			$rtnstr .= htmlspecialchars($gateway['name']) . "<br />";
+			$rtnstr .= 	"<td title='{$title}'><i class='fa {$icon}'></i></td>\n";
+			$rtnstr .= 	"<td title='{$gtitle}'>\n";
+			$rtnstr .= htmlspecialchars($gateway['name']);
+			if (isset($gateway['isdefaultgw'])) {
+				$rtnstr .= ' <i class="fa fa-globe"></i>';
+			}
+			$rtnstr .= "<br />";
 			$rtnstr .= '<div id="gateway' . $counter . '" style="display:inline"><b>';
 
 			$monitor_address = "";
@@ -106,32 +124,48 @@ if (!function_exists('compose_table_body_contents')) {
 			$rtnstr .= 	"</td>\n";
 
 			if ($gateways_status[$gname]) {
-				if (stristr($gateways_status[$gname]['status'], "force_down")) {
-					$online = gettext("Offline (forced)");
-					$bgcolor = "danger";  // lightcoral
-				} elseif (stristr($gateways_status[$gname]['status'], "down")) {
-					$online = gettext("Offline");
-					$bgcolor = "danger";  // lightcoral
-				} elseif (stristr($gateways_status[$gname]['status'], "highloss")) {
-					$online = gettext("Packetloss");
-					$bgcolor = "danger";  // lightcoral
-				} elseif (stristr($gateways_status[$gname]['status'], "loss")) {
-					$online = gettext("Packetloss");
-					$bgcolor = "warning";  // khaki
-				} elseif (stristr($gateways_status[$gname]['status'], "highdelay")) {
-					$online = gettext("Latency");
-					$bgcolor = "danger";  // lightcoral
-				} elseif (stristr($gateways_status[$gname]['status'], "delay")) {
-					$online = gettext("Latency");
-					$bgcolor = "warning";  // khaki
-				} elseif ($gateways_status[$gname]['status'] == "none") {
-					if ($gateways_status[$gname]['monitor_disable'] || ($gateways_status[$gname]['monitorip'] == "none")) {
-						$online = gettext("Online <br/>(unmonitored)");
-					} else {
-						$online = gettext("Online");
+				if (stristr($gateways_status[$gname]['status'], "online")) {
+					switch ($gateways_status[$gname]['substatus']) {
+						case "highloss":
+							$online = gettext("Danger, Packetloss");
+							$bgcolor = "danger";
+							break;
+						case "highdelay":
+							$online = gettext("Danger, Latency");
+							$bgcolor = "danger";
+							break;
+						case "loss":
+							$online = gettext("Warning, Packetloss");
+							$bgcolor = "warning";
+							break;
+						case "delay":
+							$online = gettext("Warning, Latency");
+							$bgcolor = "warning";
+							break;
+						default:
+							if ($status['monitor_disable'] || ($status['monitorip'] == "none")) {
+								$online = gettext("Online <br/>(unmonitored)");
+							} else {
+								$online = gettext("Online");
+							}
+							$bgcolor = "success";
 					}
-					$bgcolor = "success";  // lightgreen
-				} elseif ($gateways_status[$gname]['status'] == "") {
+				} elseif (stristr($gateways_status[$gname]['status'], "down")) {
+					$bgcolor = "danger";
+					switch ($gateways_status[$gname]['substatus']) {
+						case "force_down":
+							$online = gettext("Offline (forced)");
+							break;
+						case "highloss":
+							$online = gettext("Offline, Packetloss");
+							break;
+						case "highdelay":
+							$online = gettext("Offline, Latency");
+							break;
+						default:
+							$online = gettext("Offline");
+					}
+				} else {
 					$online = gettext("Pending");
 					$bgcolor = "info";  // lightgray
 				}
@@ -206,6 +240,7 @@ $widgetkey_nodash = str_replace("-", "", $widgetkey);
 	<table class="table table-striped table-hover table-condensed">
 		<thead>
 			<tr>
+				<th></th>
 				<th><?=gettext("Name")?></th>
 				<th>RTT</th>
 				<th>RTTsd</th>
